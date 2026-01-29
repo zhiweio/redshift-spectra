@@ -1,0 +1,203 @@
+[project]
+name = "redshift-spectra"
+version = "1.0.0"
+description = "Turn your Amazon Redshift Data Warehouse into a secure, scalable Data-as-a-Service (DaaS) platform"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "zhiweio", email = "zhiweio@gmail.com" }
+]
+keywords = [
+    "aws",
+    "redshift",
+    "data-as-a-service",
+    "daas",
+    "serverless",
+    "lambda",
+    "api",
+    "multi-tenant",
+    "bulk-api"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "aws-lambda-powertools>=2.30.0",
+    "pydantic>=2.5.0",
+    "boto3>=1.34.0",
+    "pydantic-settings>=2.1.0",
+    "pyarrow>=14.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "moto[dynamodb,s3,secretsmanager]>=5.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "boto3-stubs[redshift-data,dynamodb,s3,secretsmanager]>=1.34.0",
+    "pre-commit>=3.6.0",
+    "httpx>=0.27.0",
+    "freezegun>=1.4.0",
+]
+
+docs = [
+    "mkdocs>=1.5.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.24.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhiweio/redshift-spectra"
+Documentation = "https://github.com/zhiweio/redshift-spectra#readme"
+Repository = "https://github.com/zhiweio/redshift-spectra.git"
+Issues = "https://github.com/zhiweio/redshift-spectra/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spectra"]
+
+# =============================================================================
+# UV Configuration
+# =============================================================================
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-mock>=3.12.0",
+    "moto[dynamodb,s3,secretsmanager]>=5.0.0",
+    "ruff>=0.3.0",
+    "mypy>=1.8.0",
+    "boto3-stubs[redshift-data,dynamodb,s3,secretsmanager]>=1.34.0",
+    "pre-commit>=3.6.0",
+    "httpx>=0.27.0",
+    "freezegun>=1.4.0",
+]
+
+# =============================================================================
+# Ruff Configuration
+# =============================================================================
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+    "PTH",    # flake8-use-pathlib
+    "ERA",    # eradicate
+    "PL",     # pylint
+    "RUF",    # ruff-specific
+]
+ignore = [
+    "E501",     # line too long (handled by formatter)
+    "B008",     # do not perform function calls in argument defaults
+    "B904",     # raise without from inside except
+    "PLR0913",  # too many arguments
+    "PLR2004",  # magic value used in comparison
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["spectra"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["ARG001", "PLR2004"]
+
+# =============================================================================
+# MyPy Configuration
+# =============================================================================
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3.*",
+    "botocore.*",
+    "moto.*",
+    "aws_lambda_powertools.*",
+]
+ignore_missing_imports = true
+
+# =============================================================================
+# Pytest Configuration
+# =============================================================================
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "-ra",
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "e2e: End-to-end tests",
+]
+asyncio_mode = "auto"
+
+# =============================================================================
+# Coverage Configuration
+# =============================================================================
+
+[tool.coverage.run]
+source = ["src/spectra"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "@abstractmethod",
+]
+show_missing = true
+fail_under = 80
