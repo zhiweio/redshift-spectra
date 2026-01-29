@@ -18,12 +18,28 @@ from spectra.middleware.tenant import TenantContext, extract_tenant_context
 from spectra.models.query import QueryRequest, QueryResponse
 from spectra.services.job import DuplicateJobError, JobService
 from spectra.services.redshift import QueryExecutionError, RedshiftService
+from spectra.utils.config import get_settings
 from spectra.utils.response import api_response
+from spectra.utils.sql_validator import SQLSecurityLevel, SQLValidationError, SQLValidator
 
 logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver()
+
+
+def _get_sql_validator() -> SQLValidator:
+    """Get SQL validator with configured settings."""
+    settings = get_settings()
+    security_level = SQLSecurityLevel(settings.sql_security_level)
+    return SQLValidator(
+        security_level=security_level,
+        max_query_length=settings.sql_max_query_length,
+        max_joins=settings.sql_max_joins,
+        max_subqueries=settings.sql_max_subqueries,
+        allow_cte=settings.sql_allow_cte,
+        allow_union=settings.sql_allow_union,
+    )
 
 
 @app.post("/v1/queries")
@@ -50,6 +66,27 @@ def submit_query() -> dict[str, Any]:
         raise BadRequestError(f"Invalid request: {e.errors()}")
     except Exception as e:
         raise BadRequestError(f"Invalid JSON body: {e!s}")
+
+    # Validate SQL for security
+    try:
+        sql_validator = _get_sql_validator()
+        validation_result = sql_validator.validate(request.sql)
+        if validation_result.warnings:
+            logger.warning(
+                "SQL validation warnings",
+                extra={"warnings": validation_result.warnings},
+            )
+    except SQLValidationError as e:
+        logger.warning(
+            "SQL validation failed",
+            extra={
+                "error_code": e.error_code,
+                "message": e.message,
+                "details": e.details,
+            },
+        )
+        metrics.add_metric(name="SQLValidationFailed", unit=MetricUnit.Count, value=1)
+        raise BadRequestError(f"SQL validation failed: {e.message}")
 
     # Initialize services
     job_service = JobService()

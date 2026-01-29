@@ -152,7 +152,7 @@ FROM tenant_group;
 
 | Threat | Mitigation |
 |--------|------------|
-| SQL Injection | Parameterized queries, input validation |
+| SQL Injection | Multi-layer validation, parameterized queries, SQLValidator |
 | Credential Theft | Short-lived tokens, Secrets Manager |
 | Data Leakage | RLS, CLS, encryption |
 | Privilege Escalation | Least-privilege IAM, database roles |
@@ -163,3 +163,4 @@ FROM tenant_group;
 
 - [Authentication](authentication.md) - Deep dive into auth modes
 - [Authorization](authorization.md) - RLS and CLS implementation
+- [SQL Security](sql-security.md) - SQL injection prevention and query validation

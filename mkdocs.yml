@@ -83,6 +83,7 @@ nav:
       - Overview: security/overview.md
       - Authentication: security/authentication.md
       - Authorization: security/authorization.md
+      - SQL Security: security/sql-security.md
   - Performance:
       - Overview: performance/overview.md
       - Session Reuse: performance/session-reuse.md

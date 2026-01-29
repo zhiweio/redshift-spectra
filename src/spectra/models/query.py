@@ -74,17 +74,42 @@ class QueryRequest(BaseModel):
     @field_validator("sql")
     @classmethod
     def validate_sql(cls, v: str) -> str:
-        """Basic SQL validation."""
+        """Basic SQL validation at model level.
+
+        Note: Comprehensive security validation is performed by SQLValidator
+        in the handler layer. This is just a quick sanity check.
+        """
         v = v.strip()
         if not v:
             raise ValueError("SQL query cannot be empty")
 
-        # Block dangerous operations (basic check)
-        dangerous_keywords = ["DROP DATABASE", "DROP SCHEMA", "TRUNCATE"]
+        # Remove trailing semicolons (single statement only)
+        v = v.rstrip(";").strip()
+
+        # Quick check for obviously dangerous operations
         upper_sql = v.upper()
-        for keyword in dangerous_keywords:
-            if keyword in upper_sql:
-                raise ValueError(f"Dangerous SQL operation not allowed: {keyword}")
+
+        # Must start with SELECT or WITH (for CTEs)
+        if not (upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")):
+            raise ValueError("Only SELECT statements are allowed")
+
+        # Block obviously dangerous patterns
+        dangerous_patterns = [
+            "DROP DATABASE",
+            "DROP SCHEMA",
+            "DROP TABLE",
+            "TRUNCATE",
+            "DELETE FROM",
+            "INSERT INTO",
+            "UPDATE ",
+            "CREATE ",
+            "ALTER ",
+            "GRANT ",
+            "REVOKE ",
+        ]
+        for pattern in dangerous_patterns:
+            if pattern in upper_sql:
+                raise ValueError(f"Dangerous SQL operation not allowed: {pattern.strip()}")
 
         return v
 

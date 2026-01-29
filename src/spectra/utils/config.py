@@ -68,6 +68,19 @@ class Settings(BaseSettings):
         default=10, description="Maximum concurrent queries per tenant"
     )
 
+    # SQL Security Configuration
+    sql_security_level: Literal["strict", "standard", "permissive"] = Field(
+        default="standard",
+        description="SQL validation security level: strict, standard, or permissive",
+    )
+    sql_max_query_length: int = Field(
+        default=100000, description="Maximum SQL query length in characters"
+    )
+    sql_max_joins: int = Field(default=10, description="Maximum number of JOINs per query")
+    sql_max_subqueries: int = Field(default=5, description="Maximum number of subqueries")
+    sql_allow_cte: bool = Field(default=True, description="Allow Common Table Expressions (WITH)")
+    sql_allow_union: bool = Field(default=False, description="Allow UNION statements")
+
     # API Configuration
     api_version: str = Field(default="v1", description="API version prefix")
     cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
