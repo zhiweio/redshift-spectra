@@ -6,7 +6,7 @@
 
 .PHONY: help install install-dev clean lint format type-check test test-unit \
         test-integration test-cov build package deploy-dev deploy-prod \
-        docs docs-serve tf-init tf-plan tf-apply tf-destroy
+        docs docs-serve tg-init tg-plan tg-apply tg-destroy
 
 # Default shell
 SHELL := /bin/bash
@@ -18,11 +18,6 @@ SRC_DIR := src/spectra
 TESTS_DIR := tests
 LAMBDA_DIR := dist/lambda
 DOCS_DIR := docs
-
-# Terraform settings
-TF_DIR := terraform
-TF_VARS_DEV := -var-file=environments/dev.tfvars
-TF_VARS_PROD := -var-file=environments/prod.tfvars
 
 # Colors for output
 BLUE := \033[0;34m
@@ -237,7 +232,7 @@ package-layer-script: requirements.txt  ## Create Lambda layer using Python scri
 	uv run python scripts/build_layer.py --output $(LAMBDA_DIR)/layer.zip
 
 # =============================================================================
-# Terragrunt Infrastructure (Recommended)
+# Terragrunt Infrastructure
 # =============================================================================
 
 # Terragrunt settings
@@ -256,6 +251,10 @@ tg-init-prod:  ## Initialize Terragrunt for prod environment
 tg-validate-dev:  ## Validate Terragrunt configuration for dev
 	@echo -e "$(BLUE)Validating Terragrunt (dev)...$(NC)"
 	cd $(TG_DEV_DIR) && terragrunt run-all validate
+
+tg-validate-prod:  ## Validate Terragrunt configuration for prod
+	@echo -e "$(BLUE)Validating Terragrunt (prod)...$(NC)"
+	cd $(TG_PROD_DIR) && terragrunt run-all validate
 
 tg-plan-dev:  ## Plan Terragrunt changes for dev
 	@echo -e "$(BLUE)Planning Terragrunt (dev)...$(NC)"
@@ -277,15 +276,27 @@ tg-destroy-dev:  ## Destroy dev infrastructure (use with caution!)
 	@echo -e "$(RED)Destroying dev infrastructure...$(NC)"
 	cd $(TG_DEV_DIR) && terragrunt run-all destroy
 
+tg-destroy-prod:  ## Destroy prod infrastructure (use with extreme caution!)
+	@echo -e "$(RED)Destroying prod infrastructure...$(NC)"
+	cd $(TG_PROD_DIR) && terragrunt run-all destroy
+
 tg-output-dev:  ## Show Terragrunt outputs for dev
 	@echo -e "$(BLUE)Terragrunt outputs (dev):$(NC)"
 	cd $(TG_DEV_DIR) && terragrunt run-all output
+
+tg-output-prod:  ## Show Terragrunt outputs for prod
+	@echo -e "$(BLUE)Terragrunt outputs (prod):$(NC)"
+	cd $(TG_PROD_DIR) && terragrunt run-all output
 
 tg-graph-dev:  ## Show dependency graph for dev
 	@echo -e "$(BLUE)Terragrunt dependency graph (dev):$(NC)"
 	cd $(TG_DEV_DIR) && terragrunt graph-dependencies
 
-# Module-specific commands
+tg-graph-prod:  ## Show dependency graph for prod
+	@echo -e "$(BLUE)Terragrunt dependency graph (prod):$(NC)"
+	cd $(TG_PROD_DIR) && terragrunt graph-dependencies
+
+# Module-specific commands (dev)
 tg-plan-dynamodb-dev:  ## Plan DynamoDB module for dev
 	@echo -e "$(BLUE)Planning DynamoDB (dev)...$(NC)"
 	cd $(TG_DEV_DIR)/dynamodb && terragrunt plan
@@ -298,40 +309,24 @@ tg-plan-api-gateway-dev:  ## Plan API Gateway module for dev
 	@echo -e "$(BLUE)Planning API Gateway (dev)...$(NC)"
 	cd $(TG_DEV_DIR)/api-gateway && terragrunt plan
 
-# =============================================================================
-# Terraform Infrastructure (Legacy - use Terragrunt instead)
-# =============================================================================
+tg-plan-s3-dev:  ## Plan S3 module for dev
+	@echo -e "$(BLUE)Planning S3 (dev)...$(NC)"
+	cd $(TG_DEV_DIR)/s3 && terragrunt plan
 
-tf-init:  ## Initialize Terraform
-	@echo -e "$(BLUE)Initializing Terraform...$(NC)"
-	cd $(TF_DIR) && terraform init
+tg-plan-iam-dev:  ## Plan IAM module for dev
+	@echo -e "$(BLUE)Planning IAM (dev)...$(NC)"
+	cd $(TG_DEV_DIR)/iam && terragrunt plan
 
-tf-validate:  ## Validate Terraform configuration
-	@echo -e "$(BLUE)Validating Terraform...$(NC)"
-	cd $(TF_DIR) && terraform validate
+tg-plan-monitoring-dev:  ## Plan Monitoring module for dev
+	@echo -e "$(BLUE)Planning Monitoring (dev)...$(NC)"
+	cd $(TG_DEV_DIR)/monitoring && terragrunt plan
 
-tf-plan-dev:  ## Plan Terraform changes for dev
-	@echo -e "$(BLUE)Planning Terraform (dev)...$(NC)"
-	cd $(TF_DIR) && terraform plan $(TF_VARS_DEV) -out=tfplan
-
-tf-plan-prod:  ## Plan Terraform changes for prod
-	@echo -e "$(BLUE)Planning Terraform (prod)...$(NC)"
-	cd $(TF_DIR) && terraform plan $(TF_VARS_PROD) -out=tfplan
-
-tf-apply:  ## Apply Terraform changes
-	@echo -e "$(YELLOW)Applying Terraform changes...$(NC)"
-	cd $(TF_DIR) && terraform apply tfplan
-
-tf-destroy-dev:  ## Destroy dev infrastructure (use with caution!)
-	@echo -e "$(RED)Destroying dev infrastructure...$(NC)"
-	cd $(TF_DIR) && terraform destroy $(TF_VARS_DEV)
-
-tf-output:  ## Show Terraform outputs
-	@echo -e "$(BLUE)Terraform outputs:$(NC)"
-	cd $(TF_DIR) && terraform output
+tg-plan-secrets-dev:  ## Plan Secrets module for dev
+	@echo -e "$(BLUE)Planning Secrets (dev)...$(NC)"
+	cd $(TG_DEV_DIR)/secrets && terragrunt plan
 
 # =============================================================================
-# Deployment (Using Terragrunt)
+# Deployment
 # =============================================================================
 
 deploy-dev: package-all tg-plan-dev tg-apply-dev  ## Deploy to dev environment
