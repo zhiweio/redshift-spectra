@@ -5,7 +5,7 @@
 # - API Handler (REST API endpoints)
 # - Worker (Async job processing)
 # - Authorizer (JWT/IAM authorization)
-# 
+#
 # Architecture:
 # - Lambda Layer: Contains all third-party dependencies (boto3, pydantic, etc.)
 # - Lambda Functions: Contains only application code (spectra package)
@@ -47,7 +47,7 @@ locals {
     POWERTOOLS_SERVICE_NAME      = var.name_prefix
     POWERTOOLS_LOG_LEVEL         = var.log_level
     POWERTOOLS_METRICS_NAMESPACE = "${var.name_prefix}/metrics"
-    
+
     # Application configuration
     LOG_LEVEL = var.log_level
   })
@@ -208,6 +208,8 @@ resource "aws_lambda_function" "worker" {
 # =============================================================================
 
 resource "aws_lambda_permission" "api_gateway_authorizer" {
+  count = var.api_gateway_execution_arn != "*" ? 1 : 0
+
   statement_id  = "AllowAPIGatewayInvokeAuthorizer"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.authorizer.function_name
@@ -216,6 +218,8 @@ resource "aws_lambda_permission" "api_gateway_authorizer" {
 }
 
 resource "aws_lambda_permission" "api_gateway_api" {
+  count = var.api_gateway_execution_arn != "*" ? 1 : 0
+
   statement_id  = "AllowAPIGatewayInvokeAPI"
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.api.function_name
@@ -252,9 +256,12 @@ resource "aws_lambda_event_source_mapping" "dynamodb_trigger" {
     }
   }
 
-  destination_config {
-    on_failure {
-      destination_arn = var.dlq_arn
+  dynamic "destination_config" {
+    for_each = var.dlq_arn != null ? [1] : []
+    content {
+      on_failure {
+        destination_arn = var.dlq_arn
+      }
     }
   }
 

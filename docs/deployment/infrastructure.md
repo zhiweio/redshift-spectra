@@ -8,29 +8,33 @@ Redshift Spectra uses **Terragrunt** for DRY, modular infrastructure deployment 
 flowchart TB
     subgraph Terragrunt["Terragrunt Configuration"]
         ROOT[terragrunt.hcl<br/>Remote State]
+        ROOT_LOCAL[terragrunt-local.hcl<br/>LocalStack Config]
         COMMON[common.hcl<br/>Shared Defaults]
     end
-    
+
     subgraph Modules["Terraform Modules"]
         DDB[dynamodb]
         S3[s3]
         IAM[iam]
-        SECRETS[secrets]
         LAMBDA[lambda]
         APIGW[api-gateway]
         MON[monitoring]
     end
-    
+
     subgraph Environments["Environments"]
+        LOCAL[local/us-east-1<br/>LocalStack]
         DEV[dev/us-east-1]
         PROD[prod/us-east-1]
     end
-    
+
+    ROOT_LOCAL --> LOCAL
     ROOT --> DEV
     ROOT --> PROD
+    COMMON --> LOCAL
     COMMON --> DEV
     COMMON --> PROD
-    
+
+    LOCAL --> Modules
     DEV --> Modules
     PROD --> Modules
 ```
@@ -39,28 +43,32 @@ flowchart TB
 
 ```
 terragrunt/
-├── terragrunt.hcl          # Root config (remote state, providers)
+├── terragrunt.hcl          # Root config for AWS (remote state, providers)
+├── terragrunt-local.hcl    # Root config for LocalStack (local state)
 ├── common.hcl              # Shared default values
 └── environments/
+    ├── local/              # LocalStack environment
+    │   ├── account.hcl     # LocalStack account settings
+    │   └── us-east-1/
+    │       ├── region.hcl  # LocalStack endpoint settings
+    │       ├── env.hcl     # Environment settings
+    │       ├── dynamodb/
+    │       ├── s3/
+    │       ├── iam/
+    │       ├── lambda/
+    │       ├── api-gateway/
+    │       └── monitoring/
     ├── dev/
     │   ├── account.hcl     # AWS account settings
     │   └── us-east-1/
     │       ├── region.hcl  # Region settings
     │       ├── env.hcl     # Environment settings
     │       ├── dynamodb/
-    │       │   └── terragrunt.hcl
     │       ├── s3/
-    │       │   └── terragrunt.hcl
     │       ├── iam/
-    │       │   └── terragrunt.hcl
-    │       ├── secrets/
-    │       │   └── terragrunt.hcl
     │       ├── lambda/
-    │       │   └── terragrunt.hcl
     │       ├── api-gateway/
-    │       │   └── terragrunt.hcl
     │       └── monitoring/
-    │           └── terragrunt.hcl
     └── prod/
         └── us-east-1/
             └── ...         # Same structure as dev
@@ -70,12 +78,14 @@ terragrunt/
 
 ```mermaid
 flowchart LR
-    DDB[DynamoDB] --> LAMBDA
-    S3[S3] --> LAMBDA
+    DDB[DynamoDB] --> IAM
+    DDB --> LAMBDA
+    S3[S3] --> IAM
+    S3 --> LAMBDA
     IAM[IAM] --> LAMBDA
-    SECRETS[Secrets] --> LAMBDA
     LAMBDA[Lambda] --> APIGW[API Gateway]
     LAMBDA --> MON[Monitoring]
+    MON --> APIGW
 ```
 
 ## Quick Start
@@ -86,6 +96,27 @@ flowchart LR
 - Terraform >= 1.5
 - Terragrunt >= 0.50
 - Lambda packages built (`make package-all`)
+
+### Deploy to LocalStack (Local Development)
+
+```bash
+# Start LocalStack and deploy all modules
+make deploy-local
+
+# Or step by step:
+make localstack-start
+make tg-init-local
+make tg-plan-local
+make tg-apply-local
+
+# View dependency graph
+make tg-graph-local
+
+# View outputs
+make tg-output-local
+```
+
+See [LocalStack documentation](../development/localstack.md) for detailed local development instructions.
 
 ### Deploy to Development
 
@@ -98,6 +129,9 @@ make tg-plan-dev
 
 # Apply changes
 make tg-apply-dev
+
+# View dependency graph
+make tg-graph-dev
 
 # View outputs
 make tg-output-dev
@@ -158,11 +192,11 @@ Each environment has specific configurations:
 # environments/dev/us-east-1/env.hcl
 locals {
   environment = "dev"
-  
+
   # Lambda settings
   lambda_memory_size = 512
   lambda_timeout     = 30
-  
+
   # DynamoDB settings
   dynamodb_billing_mode = "PAY_PER_REQUEST"
 }
@@ -172,12 +206,13 @@ locals {
 
 ### DynamoDB Module
 
-Creates tables for job tracking and session management:
+Creates tables for job tracking, session management, and bulk operations:
 
 | Table | Purpose | Indexes |
 |-------|---------|---------|
-| `spectra-jobs` | Job state tracking | GSI: tenant_id-status |
+| `spectra-jobs` | Sync query job state tracking | GSI: tenant_id-status |
 | `spectra-sessions` | Redshift session cache | GSI: tenant_id |
+| `spectra-bulk-jobs` | Async bulk job state tracking | GSI: tenant_id-status |
 
 ### Lambda Module
 
@@ -217,7 +252,7 @@ dynamodb_table_arn = "arn:aws:dynamodb:us-east-1:123456789012:table/spectra-jobs
 ## Cleanup
 
 !!! danger "Destructive Operation"
-    
+
     This will permanently delete all infrastructure and data!
 
 ```bash
@@ -231,13 +266,13 @@ make tg-destroy-prod
 ## Best Practices
 
 !!! tip "Always Plan First"
-    
+
     Run `make tg-plan-*` before applying changes, especially in production.
 
 !!! tip "Use Dependency Graph"
-    
+
     View module dependencies with `make tg-graph-dev` to understand deployment order.
 
 !!! warning "State Lock"
-    
+
     Terragrunt uses DynamoDB for state locking. Never force-unlock unless absolutely necessary.

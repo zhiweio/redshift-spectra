@@ -8,7 +8,8 @@
 
 # Include the LocalStack root terragrunt.hcl configuration
 include "root" {
-  path = find_in_parent_folders("terragrunt-local.hcl")
+  path   = find_in_parent_folders("terragrunt-local.hcl")
+  expose = true
 }
 
 # Include common variables
@@ -20,31 +21,37 @@ include "common" {
 # Dependencies
 dependency "dynamodb" {
   config_path = "../dynamodb"
-  
+
   mock_outputs = {
-    jobs_table_arn       = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-jobs"
-    sessions_table_arn   = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-sessions"
-    jobs_table_name      = "mock-jobs"
-    sessions_table_name  = "mock-sessions"
+    jobs_table_arn      = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-jobs"
+    sessions_table_arn  = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-sessions"
+    bulk_jobs_table_arn = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-bulk-jobs"
+    jobs_table_name     = "mock-jobs"
+    sessions_table_name = "mock-sessions"
+    all_table_arns = [
+      "arn:aws:dynamodb:us-east-1:000000000000:table/mock-jobs",
+      "arn:aws:dynamodb:us-east-1:000000000000:table/mock-sessions",
+      "arn:aws:dynamodb:us-east-1:000000000000:table/mock-bulk-jobs"
+    ]
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
 }
 
 dependency "s3" {
   config_path = "../s3"
-  
+
   mock_outputs = {
     bucket_arn  = "arn:aws:s3:::mock-bucket"
     bucket_name = "mock-bucket"
   }
-  mock_outputs_allowed_terraform_commands = ["validate", "plan"]
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
 }
 
 # Load configuration
 locals {
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
   env_vars     = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  
+
   account = local.account_vars.locals
   env     = local.env_vars.locals.settings
 }
@@ -57,26 +64,23 @@ terraform {
 # Module inputs
 inputs = {
   name_prefix = "${include.root.locals.project_name}-${include.root.locals.environment}"
-  
-  # DynamoDB permissions
-  dynamodb_table_arns = [
-    dependency.dynamodb.outputs.jobs_table_arn,
-    dependency.dynamodb.outputs.sessions_table_arn
-  ]
-  
+
+  # DynamoDB permissions (all tables including bulk_jobs)
+  dynamodb_table_arns = dependency.dynamodb.outputs.all_table_arns
+
   # S3 permissions
   s3_bucket_arn = dependency.s3.outputs.bucket_arn
-  
+
   # LocalStack doesn't require Redshift permissions (mocked)
   redshift_workgroup_arn = "arn:aws:redshift-serverless:us-east-1:000000000000:workgroup/*"
   redshift_namespace_arn = "arn:aws:redshift-serverless:us-east-1:000000000000:namespace/*"
-  
+
   # Secrets Manager (LocalStack)
   secrets_arn_prefix = "arn:aws:secretsmanager:us-east-1:000000000000:secret:${include.root.locals.project_name}/${include.root.locals.environment}/*"
-  
+
   # No KMS in LocalStack
   kms_key_arn = null
-  
+
   # No VPC in LocalStack
   enable_vpc = false
 }

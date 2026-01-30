@@ -80,7 +80,7 @@ def get_statement_result(
     use_csv_format: bool = True,
 ) -> dict[str, Any]:
     """Get results with CSV format optimization."""
-    
+
     params = {"Id": statement_id}
     if next_token:
         params["NextToken"] = next_token
@@ -105,20 +105,20 @@ def _parse_csv_result(self, response: dict) -> dict:
     """Parse CSV formatted response."""
     import csv
     import io
-    
+
     # Extract column names
     columns = [col["name"] for col in response.get("ColumnMetadata", [])]
-    
+
     # Parse CSV data
     records = []
     csv_data = response.get("FormattedRecords", "")
-    
+
     if csv_data:
         reader = csv.reader(io.StringIO(csv_data))
         for row in reader:
             if len(row) == len(columns):
                 records.append(dict(zip(columns, row)))
-    
+
     return {
         "columns": columns,
         "records": records,
@@ -139,7 +139,7 @@ try:
         Format="CSV",
     )
     return self._parse_csv_result(response)
-    
+
 except ClientError as e:
     if "ValidationException" in str(e) and use_csv_format:
         # CSV not supported, fallback to typed
@@ -177,9 +177,9 @@ CSV format returns all values as strings. Type conversion is handled at the appl
 ```python
 def _convert_types(self, records: list[dict], metadata: list[dict]) -> list[dict]:
     """Convert string values to appropriate types."""
-    
+
     type_map = {col["name"]: col["typeName"] for col in metadata}
-    
+
     converted = []
     for record in records:
         row = {}
@@ -195,25 +195,25 @@ def _convert_types(self, records: list[dict], metadata: list[dict]) -> list[dict
             else:
                 row[key] = value
         converted.append(row)
-    
+
     return converted
 ```
 
 ## Limitations
 
 !!! note "String Representation"
-    
-    All values are returned as strings. Complex types (arrays, JSON) 
+
+    All values are returned as strings. Complex types (arrays, JSON)
     may need additional parsing.
 
 !!! note "NULL Handling"
-    
-    NULL values appear as empty strings in CSV format. Ensure your 
+
+    NULL values appear as empty strings in CSV format. Ensure your
     application handles this correctly.
 
 !!! note "API Availability"
-    
-    `get_statement_result_v2` requires recent boto3 version. 
+
+    `get_statement_result_v2` requires recent boto3 version.
     Spectra includes automatic fallback for compatibility.
 
 ## Configuration
@@ -231,14 +231,14 @@ result = redshift_service.get_statement_result(
 ## Best Practices
 
 !!! tip "Use CSV for Large Results"
-    
+
     CSV format provides the most benefit for results with 1,000+ rows.
 
 !!! tip "Consider Type Requirements"
-    
+
     If you need precise numeric types (e.g., Decimal for financial data),
     consider using typed format or implementing custom type conversion.
 
 !!! tip "Monitor Parse Times"
-    
+
     Add metrics to track parsing duration and identify optimization opportunities.

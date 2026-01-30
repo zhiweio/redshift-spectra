@@ -18,7 +18,7 @@ flowchart LR
         S1[Submit Query] --> S2[Wait for Execution]
         S2 --> S3[Receive Results]
     end
-    
+
     subgraph Async["Bulk API (Asynchronous)"]
         direction TB
         A1[Create Job] --> A2[Upload Data]
@@ -43,7 +43,7 @@ flowchart LR
         L2["Lambda: 15 min"]
         L3["Bulk Query: Hours"]
     end
-    
+
     L3 -.->|"Exceeds"| L1
     L3 -.->|"Exceeds"| L2
 ```
@@ -107,26 +107,26 @@ flowchart TB
     subgraph Client["Client Layer"]
         APP[Application]
     end
-    
+
     subgraph API["API Layer"]
         GW[API Gateway]
         HANDLER[Lambda Handler]
     end
-    
+
     subgraph State["State Management"]
         DDB[(DynamoDB)]
         STREAM[DynamoDB Streams]
     end
-    
+
     subgraph Processing["Processing Layer"]
         WORKER[Worker Lambda]
     end
-    
+
     subgraph Data["Data Layer"]
         S3[(S3)]
         RS[(Redshift)]
     end
-    
+
     APP --> GW
     GW --> HANDLER
     HANDLER --> DDB
@@ -136,7 +136,7 @@ flowchart TB
     WORKER --> RS
     WORKER --> S3
     WORKER --> DDB
-    
+
     APP -.->|"Poll Status"| GW
     APP -.->|"Download Results"| S3
 ```
@@ -194,16 +194,16 @@ For predictable workloads, use fixed-interval polling:
 sequenceDiagram
     participant Client
     participant API
-    
+
     Client->>API: POST /bulk/jobs (create)
     API-->>Client: job_id
-    
+
     loop Every 5 seconds
         Client->>API: GET /bulk/jobs/{id}
         API-->>Client: state
         Note over Client: Check if terminal state
     end
-    
+
     Client->>API: GET /bulk/jobs/{id}/results
     API-->>Client: download_url
 ```
@@ -249,13 +249,13 @@ sequenceDiagram
     participant Client
     participant API
     participant Worker
-    
+
     Client->>API: PATCH /bulk/jobs/{id}
     Note right of Client: {"state": "Aborted"}
-    
+
     API->>API: Update job state
     API-->>Client: Confirmed
-    
+
     Note over Worker: Worker checks state<br/>before continuing
     Worker->>Worker: Stop processing
 ```
@@ -340,13 +340,13 @@ flowchart TD
     Q{Query Size?}
     Q -->|"< 10K rows"| QueryAPI[Query API]
     Q -->|"> 10K rows"| BulkAPI[Bulk API]
-    
+
     QueryAPI --> Sync[Synchronous]
     BulkAPI --> Async[Asynchronous]
-    
+
     Sync --> Inline[Inline JSON Response]
     Async --> S3[S3 Export]
-    
+
     Inline --> Fast["⚡ Fast"]
     S3 --> Complete["📦 Complete Data"]
 ```

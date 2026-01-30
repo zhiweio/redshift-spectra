@@ -3,6 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.5-blueviolet)](https://www.terraform.io/)
+[![Terragrunt](https://img.shields.io/badge/terragrunt-%3E%3D0.50-blueviolet)](https://terragrunt.gruntwork.io/)
+[![LocalStack](https://img.shields.io/badge/localstack-local%20dev-ff69b4)](https://localstack.cloud/)
 [![AWS](https://img.shields.io/badge/AWS-Serverless-orange)](https://aws.amazon.com/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://zhiweio.github.io/redshift-spectra/)
 
@@ -32,28 +34,28 @@ flowchart TB
         BI[BI Tools]
         PARTNER[Partners]
     end
-    
+
     subgraph Edge["API Layer"]
         WAF[AWS WAF]
         GW[API Gateway]
         AUTH[Lambda Authorizer]
     end
-    
+
     subgraph Compute["Compute Layer"]
         QUERY[Query Handler<br/>Synchronous]
         BULK[Bulk Handler<br/>Asynchronous]
     end
-    
+
     subgraph State["State & Storage"]
         DDB[(DynamoDB<br/>Jobs · Sessions)]
         S3[(S3<br/>Large Results)]
     end
-    
+
     subgraph Data["Data Layer"]
         RS[(Redshift<br/>RLS · RBAC)]
         SM[Secrets Manager]
     end
-    
+
     Clients --> WAF --> GW --> AUTH
     AUTH --> QUERY
     AUTH --> BULK
@@ -232,9 +234,12 @@ make install-dev
 # Run all tests (450+ test cases)
 make test
 
-# Lint and format
+# Lint and format Python code
 make lint
 make format
+
+# Format Terraform/Terragrunt files
+make iac-fmt
 
 # Build Lambda packages
 make package-all
@@ -254,9 +259,9 @@ redshift-spectra/
 │   ├── models/           # Request/response schemas
 │   └── utils/            # SQL validator, config, helpers
 ├── terraform/            # Terraform modules
-│   └── modules/          # API Gateway, Lambda, DynamoDB, IAM, S3
+│   └── modules/          # api-gateway, dynamodb, iam, lambda, monitoring, s3
 ├── terragrunt/           # Terragrunt configurations
-│   └── environments/     # dev, staging, prod configs
+│   └── environments/     # local, dev, prod environments
 ├── tests/                # Unit and integration tests
 │   ├── unit/             # Handler, service, utility tests
 │   └── integration/      # End-to-end workflow tests

@@ -73,7 +73,7 @@ flowchart TB
         ROOT_AWS["terragrunt.hcl<br/><i>AWS Root Config</i>"]
         ROOT_LOCAL["terragrunt-local.hcl<br/><i>LocalStack Root Config</i>"]
         COMMON["common.hcl<br/><i>Shared Variables</i>"]
-        
+
         subgraph EnvConfigs["environments/"]
             ENV_LOCAL["local/<br/>• account.hcl<br/>• us-east-1/env.hcl"]
             ENV_DEV["dev/<br/>• account.hcl<br/>• us-east-1/env.hcl"]
@@ -86,7 +86,6 @@ flowchart TB
         MOD_DDB[("💾 dynamodb")]
         MOD_S3[("📦 s3")]
         MOD_IAM[("🔐 iam")]
-        MOD_SECRETS[("🔑 secrets")]
         MOD_LAMBDA[("⚡ lambda")]
         MOD_APIGW[("🌐 api-gateway")]
         MOD_MON[("📊 monitoring")]
@@ -132,7 +131,7 @@ flowchart TB
     class DEV devEnv
     class PROD prodEnv
     class ROOT_AWS,ROOT_LOCAL,COMMON,ENV_LOCAL,ENV_DEV,ENV_PROD config
-    class MOD_DDB,MOD_S3,MOD_IAM,MOD_SECRETS,MOD_LAMBDA,MOD_APIGW,MOD_MON modules
+    class MOD_DDB,MOD_S3,MOD_IAM,MOD_LAMBDA,MOD_APIGW,MOD_MON modules
     class LS_S3,LS_DDB,LS_IAM,LS_SM,LS_LAMBDA,LS_APIGW,LS_CW services
 ```
 
@@ -149,12 +148,12 @@ sequenceDiagram
     participant AWS as ☁️ AWS Services
 
     Note over Dev,AWS: Local Development Phase
-    
+
     Dev->>Docker: make localstack-start
     Docker->>LS: Start container (port 4566)
     LS-->>Docker: Ready ✓
     Docker-->>Dev: LocalStack running
-    
+
     Dev->>TG: make tg-apply-local
     TG->>TG: Load terragrunt-local.hcl
     TG->>TF: Generate provider.tf<br/>(LocalStack endpoints)
@@ -164,7 +163,7 @@ sequenceDiagram
     TG-->>Dev: Infrastructure deployed locally
 
     Note over Dev,AWS: Testing & Iteration
-    
+
     Dev->>LS: Run integration tests
     LS-->>Dev: Test results
     Dev->>Dev: Fix issues, iterate
@@ -229,6 +228,7 @@ graph LR
 | `make tg-apply-local` | Apply all changes to LocalStack |
 | `make tg-destroy-local` | Destroy all LocalStack resources |
 | `make tg-output-local` | Show Terragrunt outputs |
+| `make tg-graph-local` | Show dependency graph for LocalStack |
 
 ### Module-Specific Commands
 
@@ -240,8 +240,17 @@ graph LR
 | `make tg-apply-s3-local` | Apply S3 changes |
 | `make tg-plan-iam-local` | Plan IAM changes |
 | `make tg-apply-iam-local` | Apply IAM changes |
-| `make tg-plan-secrets-local` | Plan Secrets changes |
-| `make tg-apply-secrets-local` | Apply Secrets changes |
+
+### Formatting Commands
+
+| Command | Description |
+|---------|-------------|
+| `make tf-fmt` | Format all Terraform files |
+| `make tf-fmt-check` | Check Terraform formatting (no changes) |
+| `make tg-fmt` | Format all Terragrunt HCL files |
+| `make tg-fmt-check` | Check Terragrunt formatting (no changes) |
+| `make iac-fmt` | Format all Terraform and Terragrunt files |
+| `make iac-fmt-check` | Check all IaC formatting |
 
 ## Environment Switching
 

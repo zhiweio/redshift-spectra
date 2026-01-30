@@ -15,8 +15,8 @@ resource "aws_dynamodb_table" "jobs" {
   write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
 
   # Primary key
-  hash_key  = "pk"          # tenant_id
-  range_key = "sk"          # job_id
+  hash_key  = "pk" # tenant_id
+  range_key = "sk" # job_id
 
   # Attributes
   attribute {
@@ -169,8 +169,8 @@ resource "aws_dynamodb_table" "bulk_jobs" {
   write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
 
   # Primary key
-  hash_key  = "pk"          # tenant_id
-  range_key = "sk"          # bulk_job_id
+  hash_key  = "pk" # tenant_id
+  range_key = "sk" # bulk_job_id
 
   attribute {
     name = "pk"

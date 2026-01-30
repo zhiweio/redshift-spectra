@@ -13,13 +13,13 @@ flowchart TB
         BOTO[boto3]
         ARROW[pyarrow]
     end
-    
+
     subgraph Functions["Function Code (~KB each)"]
         API[api-handler.zip]
         WORKER[worker.zip]
         AUTH[authorizer.zip]
     end
-    
+
     Layer --> API
     Layer --> WORKER
     Layer --> AUTH
@@ -42,18 +42,18 @@ flowchart LR
         PYPROJECT[pyproject.toml]
         SRC[src/spectra/]
     end
-    
+
     subgraph Build["Build"]
         REQ[requirements.txt]
         LAYER[layer.zip]
         FUNCS[function.zip]
     end
-    
+
     subgraph Deploy["Deploy"]
         L_LAYER[Lambda Layer]
         L_FUNC[Lambda Functions]
     end
-    
+
     PYPROJECT -->|"uv export"| REQ
     REQ -->|"pip install"| LAYER
     SRC -->|"zip"| FUNCS
@@ -236,15 +236,15 @@ pip install --no-deps package-name
 ## Best Practices
 
 !!! tip "Separate Code and Dependencies"
-    
+
     Always use layers for dependencies. This enables fast code-only deployments.
 
 !!! tip "Pin Dependency Versions"
-    
+
     Use `uv.lock` to ensure reproducible builds across environments.
 
 !!! warning "Test Layer Locally"
-    
+
     Use SAM CLI to test with layers before deploying:
     ```bash
     sam local invoke --layer-cache /tmp/layers

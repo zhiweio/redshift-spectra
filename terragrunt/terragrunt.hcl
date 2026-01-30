@@ -12,30 +12,30 @@
 locals {
   # Parse the file path to get environment and region
   parsed = regex(".*/environments/(?P<env>\\w+)/(?P<region>[\\w-]+)/.*", get_terragrunt_dir())
-  
+
   environment = local.parsed.env
   aws_region  = local.parsed.region
-  
+
   # Load account-level variables
   account_vars = read_terragrunt_config(find_in_parent_folders("account.hcl"))
-  
+
   # Load region-level variables
   region_vars = read_terragrunt_config(find_in_parent_folders("region.hcl", "region.hcl"), {
     locals = {}
   })
-  
+
   # Load environment-level variables
   env_vars = read_terragrunt_config(find_in_parent_folders("env.hcl", "env.hcl"), {
     locals = {}
   })
-  
+
   # Extract commonly used variables
   account_id   = local.account_vars.locals.account_id
   account_name = local.account_vars.locals.account_name
-  
+
   # Project settings
   project_name = "redshift-spectra"
-  
+
   # Common tags for all resources
   common_tags = {
     Project     = local.project_name
@@ -50,19 +50,19 @@ locals {
 # -----------------------------------------------------------------------------
 remote_state {
   backend = "s3"
-  
+
   config = {
     encrypt        = true
     bucket         = "${local.project_name}-terraform-state-${local.account_id}"
     key            = "${path_relative_to_include()}/terraform.tfstate"
     region         = local.aws_region
     dynamodb_table = "${local.project_name}-terraform-locks"
-    
+
     # Enable server-side encryption
-    s3_bucket_tags = local.common_tags
+    s3_bucket_tags      = local.common_tags
     dynamodb_table_tags = local.common_tags
   }
-  
+
   generate = {
     path      = "backend.tf"
     if_exists = "overwrite_terragrunt"
@@ -78,7 +78,7 @@ generate "provider" {
   contents  = <<EOF
 terraform {
   required_version = ">= 1.5.0"
-  
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -93,7 +93,7 @@ terraform {
 
 provider "aws" {
   region = "${local.aws_region}"
-  
+
   default_tags {
     tags = ${jsonencode(local.common_tags)}
   }
@@ -108,7 +108,7 @@ inputs = {
   project_name = local.project_name
   environment  = local.environment
   aws_region   = local.aws_region
-  
+
   tags = local.common_tags
 }
 

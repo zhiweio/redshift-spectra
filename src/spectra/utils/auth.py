@@ -239,7 +239,7 @@ class LambdaAuthorizer:
         if context:
             # Flatten context for API Gateway
             policy["context"] = {
-                k: str(v) if not isinstance(v, (str, int, bool)) else v for k, v in context.items()
+                k: str(v) if not isinstance(v, str | int | bool) else v for k, v in context.items()
             }
 
         return policy

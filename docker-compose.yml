@@ -28,29 +28,29 @@ services:
       - DEBUG=${DEBUG:-0}
       - LOCALSTACK_HOST=localhost.localstack.cloud
       - GATEWAY_LISTEN=0.0.0.0:4566
-      
+
       # Services to enable (all services used by this project)
       - SERVICES=s3,dynamodb,lambda,iam,apigateway,secretsmanager,cloudwatch,logs,sts,ssm
-      
+
       # Lambda Configuration
       - LAMBDA_EXECUTOR=docker
       - LAMBDA_DOCKER_NETWORK=redshift-spectra-network
       - LAMBDA_REMOVE_CONTAINERS=true
       - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
-      
+
       # S3 Configuration
       - S3_SKIP_SIGNATURE_VALIDATION=1
-      
+
       # Persistence (optional - uncomment to persist data)
       # - PERSISTENCE=1
-      
+
       # Data directory inside container
       - DATA_DIR=/var/lib/localstack/data
-      
+
       # AWS Region (match your terragrunt configuration)
       - DEFAULT_REGION=us-east-1
       - AWS_DEFAULT_REGION=us-east-1
-      
+
       # Docker host for Lambda
       - DOCKER_HOST=unix:///var/run/docker.sock
 
@@ -64,7 +64,7 @@ services:
 
     networks:
       - redshift-spectra-network
-    
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 10s

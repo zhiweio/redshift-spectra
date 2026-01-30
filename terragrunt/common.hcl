@@ -15,7 +15,7 @@ locals {
     memory_size    = 512
     log_level      = "INFO"
   }
-  
+
   # -----------------------------------------------------------------------------
   # DynamoDB Configuration Defaults
   # -----------------------------------------------------------------------------
@@ -24,7 +24,7 @@ locals {
     read_capacity  = 5
     write_capacity = 5
   }
-  
+
   # -----------------------------------------------------------------------------
   # API Gateway Configuration Defaults
   # -----------------------------------------------------------------------------
@@ -32,17 +32,17 @@ locals {
     throttling_burst_limit = 100
     throttling_rate_limit  = 50
   }
-  
+
   # -----------------------------------------------------------------------------
   # S3 Configuration Defaults
   # -----------------------------------------------------------------------------
   s3_defaults = {
-    versioning_enabled     = false
-    lifecycle_enabled      = true
+    versioning_enabled      = false
+    lifecycle_enabled       = true
     results_expiration_days = 7
-    temp_expiration_days   = 1
+    temp_expiration_days    = 1
   }
-  
+
   # -----------------------------------------------------------------------------
   # Monitoring Configuration Defaults
   # -----------------------------------------------------------------------------

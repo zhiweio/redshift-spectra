@@ -140,7 +140,7 @@ package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
 	@echo -e "$(BLUE)Creating Lambda layer with shared dependencies...$(NC)"
 	@rm -rf $(LAMBDA_DIR)/layer
 	@mkdir -p $(LAMBDA_DIR)/layer/python
-	
+
 	# Install dependencies for Amazon Linux 2 (Lambda runtime)
 	@echo -e "$(GREEN)Installing dependencies for Lambda runtime...$(NC)"
 	pip install \
@@ -151,7 +151,7 @@ package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
 		--target $(LAMBDA_DIR)/layer/python \
 		-r requirements.txt \
 		--quiet || pip install -r requirements.txt -t $(LAMBDA_DIR)/layer/python --quiet
-	
+
 	# Remove unnecessary files to reduce layer size
 	@echo -e "$(GREEN)Optimizing layer size...$(NC)"
 	@find $(LAMBDA_DIR)/layer -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -160,10 +160,10 @@ package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
 	@find $(LAMBDA_DIR)/layer -type f -name "*.pyc" -delete 2>/dev/null || true
 	@find $(LAMBDA_DIR)/layer -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
 	@find $(LAMBDA_DIR)/layer -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
-	
+
 	# Create layer zip
 	cd $(LAMBDA_DIR)/layer && zip -r ../layer.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
-	
+
 	# Show layer size
 	@echo -e "$(GREEN)Lambda layer created: $(LAMBDA_DIR)/layer.zip$(NC)"
 	@ls -lh $(LAMBDA_DIR)/layer.zip | awk '{print "Layer size: " $$5}'
@@ -175,28 +175,28 @@ package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
 package-lambda: package-layer  ## Package Lambda functions (code only, uses layer for deps)
 	@echo -e "$(BLUE)Packaging Lambda functions (code only)...$(NC)"
 	@mkdir -p $(LAMBDA_DIR)
-	
+
 	# Clean previous builds
 	@rm -rf $(LAMBDA_DIR)/api-handler $(LAMBDA_DIR)/worker $(LAMBDA_DIR)/authorizer
-	
+
 	# Create API handler package (code only)
 	@echo -e "$(GREEN)Creating API handler package...$(NC)"
 	@mkdir -p $(LAMBDA_DIR)/api-handler
 	cp -r $(SRC_DIR) $(LAMBDA_DIR)/api-handler/spectra
 	cd $(LAMBDA_DIR)/api-handler && zip -r ../api-handler.zip . -x "*.pyc" -x "__pycache__/*"
-	
+
 	# Create Worker package (code only)
 	@echo -e "$(GREEN)Creating worker package...$(NC)"
 	@mkdir -p $(LAMBDA_DIR)/worker
 	cp -r $(SRC_DIR) $(LAMBDA_DIR)/worker/spectra
 	cd $(LAMBDA_DIR)/worker && zip -r ../worker.zip . -x "*.pyc" -x "__pycache__/*"
-	
+
 	# Create Authorizer package (code only)
 	@echo -e "$(GREEN)Creating authorizer package...$(NC)"
 	@mkdir -p $(LAMBDA_DIR)/authorizer
 	cp -r $(SRC_DIR) $(LAMBDA_DIR)/authorizer/spectra
 	cd $(LAMBDA_DIR)/authorizer && zip -r ../authorizer.zip . -x "*.pyc" -x "__pycache__/*"
-	
+
 	# Show package sizes
 	@echo -e "$(GREEN)Lambda packages created in $(LAMBDA_DIR)/$(NC)"
 	@echo "Package sizes:"
@@ -236,65 +236,92 @@ package-layer-script: requirements.txt  ## Create Lambda layer using Python scri
 # =============================================================================
 
 # Terragrunt settings
-TG_DIR := terragrunt
+TG_DIR := $(CURDIR)/terragrunt
 TG_DEV_DIR := $(TG_DIR)/environments/dev/us-east-1
 TG_PROD_DIR := $(TG_DIR)/environments/prod/us-east-1
 
+# Terraform/Terragrunt formatting
+tf-fmt:  ## Format all Terraform files
+	@echo -e "$(BLUE)Formatting Terraform files...$(NC)"
+	terraform fmt -recursive terraform/
+
+tf-fmt-check:  ## Check Terraform file formatting (no changes)
+	@echo -e "$(BLUE)Checking Terraform formatting...$(NC)"
+	terraform fmt -recursive -check terraform/
+
+tg-fmt:  ## Format all Terragrunt HCL files
+	@echo -e "$(BLUE)Formatting Terragrunt HCL files...$(NC)"
+	cd $(TG_DIR) && terragrunt hcl fmt
+
+tg-fmt-check:  ## Check Terragrunt HCL formatting (no changes)
+	@echo -e "$(BLUE)Checking Terragrunt HCL formatting...$(NC)"
+	cd $(TG_DIR) && terragrunt hcl fmt --check
+
+iac-fmt:  ## Format all Terraform and Terragrunt files
+	@echo -e "$(BLUE)Formatting all IaC files...$(NC)"
+	$(MAKE) tf-fmt
+	$(MAKE) tg-fmt
+
+iac-fmt-check:  ## Check all Terraform and Terragrunt formatting
+	@echo -e "$(BLUE)Checking all IaC formatting...$(NC)"
+	$(MAKE) tf-fmt-check
+	$(MAKE) tg-fmt-check
+
 tg-init-dev:  ## Initialize Terragrunt for dev environment
 	@echo -e "$(BLUE)Initializing Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all init
+	cd $(TG_DEV_DIR) && terragrunt run --all init
 
 tg-init-prod:  ## Initialize Terragrunt for prod environment
 	@echo -e "$(BLUE)Initializing Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all init
+	cd $(TG_PROD_DIR) && terragrunt run --all init
 
 tg-validate-dev:  ## Validate Terragrunt configuration for dev
 	@echo -e "$(BLUE)Validating Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all validate
+	cd $(TG_DEV_DIR) && terragrunt run --all validate
 
 tg-validate-prod:  ## Validate Terragrunt configuration for prod
 	@echo -e "$(BLUE)Validating Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all validate
+	cd $(TG_PROD_DIR) && terragrunt run --all validate
 
 tg-plan-dev:  ## Plan Terragrunt changes for dev
 	@echo -e "$(BLUE)Planning Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all plan
+	cd $(TG_DEV_DIR) && terragrunt run --all plan
 
 tg-plan-prod:  ## Plan Terragrunt changes for prod
 	@echo -e "$(BLUE)Planning Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all plan
+	cd $(TG_PROD_DIR) && terragrunt run --all plan
 
 tg-apply-dev:  ## Apply Terragrunt changes for dev
 	@echo -e "$(YELLOW)Applying Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all apply
+	cd $(TG_DEV_DIR) && terragrunt run --all apply
 
 tg-apply-prod:  ## Apply Terragrunt changes for prod (requires confirmation)
 	@echo -e "$(YELLOW)Applying Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all apply
+	cd $(TG_PROD_DIR) && terragrunt run --all apply
 
 tg-destroy-dev:  ## Destroy dev infrastructure (use with caution!)
 	@echo -e "$(RED)Destroying dev infrastructure...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all destroy
+	cd $(TG_DEV_DIR) && terragrunt run --all destroy
 
 tg-destroy-prod:  ## Destroy prod infrastructure (use with extreme caution!)
 	@echo -e "$(RED)Destroying prod infrastructure...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all destroy
+	cd $(TG_PROD_DIR) && terragrunt run --all destroy
 
 tg-output-dev:  ## Show Terragrunt outputs for dev
 	@echo -e "$(BLUE)Terragrunt outputs (dev):$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all output
+	cd $(TG_DEV_DIR) && terragrunt run --all output
 
 tg-output-prod:  ## Show Terragrunt outputs for prod
 	@echo -e "$(BLUE)Terragrunt outputs (prod):$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all output
+	cd $(TG_PROD_DIR) && terragrunt run --all output
 
 tg-graph-dev:  ## Show dependency graph for dev
 	@echo -e "$(BLUE)Terragrunt dependency graph (dev):$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt graph-dependencies
+	cd $(TG_DEV_DIR) && terragrunt dag graph
 
 tg-graph-prod:  ## Show dependency graph for prod
 	@echo -e "$(BLUE)Terragrunt dependency graph (prod):$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt graph-dependencies
+	cd $(TG_PROD_DIR) && terragrunt dag graph
 
 # Module-specific commands (dev)
 tg-plan-dynamodb-dev:  ## Plan DynamoDB module for dev
@@ -410,68 +437,73 @@ localstack-reset:  ## Reset LocalStack (destroy and recreate)
 tg-init-local:  ## Initialize Terragrunt for LocalStack
 	@echo -e "$(BLUE)Initializing Terragrunt (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt run-all init --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) init
 
 tg-plan-local:  ## Plan Terragrunt changes for LocalStack
 	@echo -e "$(BLUE)Planning Terragrunt (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt run-all plan --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) plan
 
 tg-apply-local:  ## Apply Terragrunt changes for LocalStack
 	@echo -e "$(BLUE)Applying Terragrunt (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt run-all apply --terragrunt-config $(TG_LOCAL_CONFIG) --terragrunt-non-interactive
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) --non-interactive apply
 
 tg-destroy-local:  ## Destroy LocalStack infrastructure
 	@echo -e "$(RED)Destroying LocalStack infrastructure...$(NC)"
 	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt run-all destroy --terragrunt-config $(TG_LOCAL_CONFIG) --terragrunt-non-interactive
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) --non-interactive destroy
 
 tg-output-local:  ## Show Terragrunt outputs for LocalStack
 	@echo -e "$(BLUE)Terragrunt outputs (LocalStack):$(NC)"
 	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt run-all output --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) output
+
+tg-graph-local:  ## Show dependency graph for LocalStack
+	@echo -e "$(BLUE)Terragrunt dependency graph (LocalStack):$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		TG_CONFIG=$(TG_LOCAL_CONFIG) terragrunt dag graph
 
 # Module-specific LocalStack commands
 tg-plan-dynamodb-local:  ## Plan DynamoDB module for LocalStack
 	@echo -e "$(BLUE)Planning DynamoDB (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
 
 tg-apply-dynamodb-local:  ## Apply DynamoDB module for LocalStack
 	@echo -e "$(BLUE)Applying DynamoDB (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
 
 tg-plan-s3-local:  ## Plan S3 module for LocalStack
 	@echo -e "$(BLUE)Planning S3 (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
 
 tg-apply-s3-local:  ## Apply S3 module for LocalStack
 	@echo -e "$(BLUE)Applying S3 (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
 
 tg-plan-iam-local:  ## Plan IAM module for LocalStack
 	@echo -e "$(BLUE)Planning IAM (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
 
 tg-apply-iam-local:  ## Apply IAM module for LocalStack
 	@echo -e "$(BLUE)Applying IAM (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
 
 tg-plan-secrets-local:  ## Plan Secrets module for LocalStack
 	@echo -e "$(BLUE)Planning Secrets (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
 
 tg-apply-secrets-local:  ## Apply Secrets module for LocalStack
 	@echo -e "$(BLUE)Applying Secrets (LocalStack)...$(NC)"
 	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
-		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
 
 # Full local deployment workflow
 deploy-local: localstack-start tg-apply-local  ## Deploy to LocalStack (start + apply)

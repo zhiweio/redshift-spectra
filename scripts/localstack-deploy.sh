@@ -57,7 +57,7 @@ wait_for_localstack() {
     print_info "Waiting for LocalStack to be ready..."
     local max_attempts=30
     local attempt=1
-    
+
     while [ $attempt -le $max_attempts ]; do
         if check_localstack; then
             print_success "LocalStack is ready!"
@@ -67,7 +67,7 @@ wait_for_localstack() {
         sleep 2
         attempt=$((attempt + 1))
     done
-    
+
     print_error "LocalStack failed to start after ${max_attempts} attempts"
     return 1
 }
@@ -76,15 +76,15 @@ wait_for_localstack() {
 cmd_start() {
     print_info "Starting LocalStack..."
     cd "${PROJECT_ROOT}"
-    
+
     if check_localstack; then
         print_warning "LocalStack is already running"
         return 0
     fi
-    
+
     docker compose up -d localstack
     wait_for_localstack
-    
+
     print_success "LocalStack started successfully"
     echo ""
     echo "LocalStack endpoint: http://localhost:4566"
@@ -119,20 +119,20 @@ cmd_deploy() {
         print_error "LocalStack is not running. Start it with: $0 start"
         exit 1
     fi
-    
+
     print_info "Deploying all modules to LocalStack..."
     cd "${TERRAGRUNT_DIR}"
-    
+
     # Set environment variables for LocalStack
     export AWS_ACCESS_KEY_ID="test"
     export AWS_SECRET_ACCESS_KEY="test"
     export AWS_DEFAULT_REGION="us-east-1"
-    
-    terragrunt run-all apply \
-        --terragrunt-config "${TERRAGRUNT_CONFIG}" \
-        --terragrunt-non-interactive \
-        --auto-approve
-    
+
+    terragrunt run --all \
+        --config "${TERRAGRUNT_CONFIG}" \
+        --non-interactive \
+        -- apply -auto-approve
+
     print_success "All modules deployed successfully!"
 }
 
@@ -141,97 +141,97 @@ cmd_destroy() {
     if ! check_localstack; then
         print_warning "LocalStack is not running, but proceeding with state cleanup..."
     fi
-    
+
     print_warning "This will destroy all resources in LocalStack"
     read -p "Are you sure? (y/N) " -n 1 -r
     echo
-    
+
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         print_info "Cancelled"
         exit 0
     fi
-    
+
     cd "${TERRAGRUNT_DIR}"
-    
+
     export AWS_ACCESS_KEY_ID="test"
     export AWS_SECRET_ACCESS_KEY="test"
     export AWS_DEFAULT_REGION="us-east-1"
-    
-    terragrunt run-all destroy \
-        --terragrunt-config "${TERRAGRUNT_CONFIG}" \
-        --terragrunt-non-interactive \
-        --auto-approve
-    
+
+    terragrunt run --all \
+        --config "${TERRAGRUNT_CONFIG}" \
+        --non-interactive \
+        -- destroy -auto-approve
+
     print_success "All resources destroyed"
 }
 
 # Apply specific module
 cmd_apply() {
     local module="$1"
-    
+
     if [ -z "$module" ]; then
         print_error "Module name required. Usage: $0 apply <module>"
-        echo "Available modules: dynamodb, s3, iam, secrets"
+        echo "Available modules: dynamodb, s3, iam, lambda, monitoring, api-gateway"
         exit 1
     fi
-    
+
     if ! check_localstack; then
         print_error "LocalStack is not running. Start it with: $0 start"
         exit 1
     fi
-    
+
     local module_dir="${TERRAGRUNT_DIR}/${module}"
-    
+
     if [ ! -d "$module_dir" ]; then
         print_error "Module not found: $module"
         echo "Available modules:"
         ls -1 "${TERRAGRUNT_DIR}" | grep -v "\.hcl$"
         exit 1
     fi
-    
+
     print_info "Applying module: ${module}"
     cd "${module_dir}"
-    
+
     export AWS_ACCESS_KEY_ID="test"
     export AWS_SECRET_ACCESS_KEY="test"
     export AWS_DEFAULT_REGION="us-east-1"
-    
+
     terragrunt apply \
-        --terragrunt-config "${TERRAGRUNT_CONFIG}" \
+        --config "${TERRAGRUNT_CONFIG}" \
         --auto-approve
-    
+
     print_success "Module ${module} applied successfully!"
 }
 
 # Plan specific module
 cmd_plan() {
     local module="$1"
-    
+
     if [ -z "$module" ]; then
         print_error "Module name required. Usage: $0 plan <module>"
         exit 1
     fi
-    
+
     if ! check_localstack; then
         print_error "LocalStack is not running. Start it with: $0 start"
         exit 1
     fi
-    
+
     local module_dir="${TERRAGRUNT_DIR}/${module}"
-    
+
     if [ ! -d "$module_dir" ]; then
         print_error "Module not found: $module"
         exit 1
     fi
-    
+
     print_info "Planning module: ${module}"
     cd "${module_dir}"
-    
+
     export AWS_ACCESS_KEY_ID="test"
     export AWS_SECRET_ACCESS_KEY="test"
     export AWS_DEFAULT_REGION="us-east-1"
-    
-    terragrunt plan --terragrunt-config "${TERRAGRUNT_CONFIG}"
+
+    terragrunt plan --config "${TERRAGRUNT_CONFIG}"
 }
 
 # Show usage
@@ -249,12 +249,14 @@ show_usage() {
     echo "  apply <mod>   Apply specific module"
     echo "  plan <mod>    Plan specific module"
     echo ""
-    echo "Available modules: dynamodb, s3, iam, secrets"
+    echo "Available modules: dynamodb, s3, iam, lambda, monitoring, api-gateway"
+    echo ""
+    echo "Deploy order: s3 -> dynamodb -> iam -> lambda -> monitoring -> api-gateway"
     echo ""
     echo "Examples:"
     echo "  $0 start"
     echo "  $0 deploy"
-    echo "  $0 apply s3"
+    echo "  $0 apply lambda"
     echo "  $0 status"
 }
 

@@ -12,14 +12,14 @@ flowchart TB
         PERM --> |"bulk:create"| ALLOW2[Allow]
         PERM --> |"missing"| DENY[Deny 403]
     end
-    
+
     subgraph DBLayer["Database Layer Authorization"]
         direction LR
         USER[db_user] --> RBAC[Role-Based Access]
         RBAC --> RLS[Row-Level Security]
         RLS --> DATA[Filtered Data]
     end
-    
+
     REQUEST[Request + Tenant Context] --> APILayer
     APILayer --> |"Allowed"| DBLayer
 ```
@@ -52,7 +52,7 @@ flowchart TB
         LOOKUP[API Key Lookup<br/>tenant_permissions table]
         DEFAULT[Default Permissions<br/>query:execute, bulk:read]
     end
-    
+
     Sources --> MERGE[Merge Permissions]
     MERGE --> CHECK[Permission Check]
 ```
@@ -68,7 +68,7 @@ Permissions support hierarchical matching:
 ```mermaid
 flowchart LR
     REQ[Required: bulk:create] --> CHECK{Permission Check}
-    
+
     CHECK --> |"Has: bulk:create"| EXACT[Exact Match ✓]
     CHECK --> |"Has: bulk:*"| WILD[Wildcard Match ✓]
     CHECK --> |"Has: *"| ALL[Universal Match ✓]
@@ -84,10 +84,10 @@ sequenceDiagram
     participant H as Handler
     participant D as Decorator
     participant L as Logic
-    
+
     H->>D: @require_permission("bulk:create")
     D->>D: Check tenant_context.permissions
-    
+
     alt Has Permission
         D->>L: Execute Business Logic
         L-->>H: Result
@@ -111,23 +111,23 @@ flowchart TB
         U2[db_user_globex]
         U3[db_user_initech]
     end
-    
+
     subgraph Groups["Database Groups"]
         G1[tenant_readers<br/>SELECT on views]
         G2[tenant_writers<br/>SELECT, INSERT on views]
         G3[tenant_admins<br/>Full access to tenant objects]
     end
-    
+
     subgraph Objects["Database Objects"]
         V1[sales_view]
         V2[customers_view]
         V3[analytics_view]
     end
-    
+
     U1 --> G1
     U2 --> G2
     U3 --> G1
-    
+
     G1 --> V1
     G1 --> V2
     G2 --> V1
@@ -144,19 +144,19 @@ flowchart TB
     subgraph Query["User Query"]
         Q1["SELECT * FROM orders"]
     end
-    
+
     subgraph RLS["RLS Policy"]
         POLICY["WHERE tenant_id = CURRENT_USER_ID()"]
     end
-    
+
     subgraph Execution["Actual Execution"]
         ACTUAL["SELECT * FROM orders<br/>WHERE tenant_id = 'acme-corp'"]
     end
-    
+
     subgraph Result["Result Set"]
         DATA["Only ACME Corp orders"]
     end
-    
+
     Query --> RLS
     RLS --> Execution
     Execution --> Result
@@ -181,7 +181,7 @@ flowchart TB
         S3["3. Attach policy to group"]
         S4["4. Grant group to user"]
     end
-    
+
     S1 --> S2 --> S3 --> S4
 ```
 
@@ -205,13 +205,13 @@ flowchart LR
         C4[ssn]
         C5[salary]
     end
-    
+
     subgraph Access["Access Levels"]
         PUBLIC[All Users]
         LIMITED[Analysts]
         RESTRICTED[Admins Only]
     end
-    
+
     C1 --> PUBLIC
     C2 --> PUBLIC
     C3 --> LIMITED
@@ -228,18 +228,18 @@ The complete authorization flow:
 ```mermaid
 flowchart TB
     REQUEST[Incoming Request] --> AUTHN{Authenticated?}
-    
+
     AUTHN -->|No| DENY401[401 Unauthorized]
     AUTHN -->|Yes| PERM{Has Permission?}
-    
+
     PERM -->|No| DENY403[403 Forbidden]
     PERM -->|Yes| EXECUTE[Execute Query]
-    
+
     EXECUTE --> RBAC{RBAC Check}
-    
+
     RBAC -->|Denied| ERROR[Query Error]
     RBAC -->|Allowed| RLS[Apply RLS]
-    
+
     RLS --> RESULT[Filtered Results]
 ```
 
@@ -253,15 +253,15 @@ flowchart TB
         T1[Connect as tenant_a user]
         T2[Query shared table]
         T3[Verify only tenant_a data]
-        
+
         T1 --> T2 --> T3
     end
-    
+
     subgraph Expected["Expected Behavior"]
         E1["Query: SELECT COUNT(*) FROM orders"]
         E2[Result: 1000 rows<br/>All belong to tenant_a]
     end
-    
+
     Test --> Expected
 ```
 
@@ -269,28 +269,28 @@ flowchart TB
 
 !!! tip "Principle of Least Privilege"
     Grant the minimum permissions required:
-    
+
     - Start with `query:execute` only
     - Add permissions as needed
     - Use specific permissions over wildcards
 
 !!! tip "Use Database Groups"
     Don't grant permissions directly to users:
-    
+
     - Create logical groups (readers, writers, admins)
     - Grant permissions to groups
     - Add users to groups
 
 !!! warning "Test Tenant Isolation"
     Regularly verify that RLS is working:
-    
+
     - Create test tenants with known data
     - Verify cross-tenant queries return no data
     - Include in CI/CD pipeline
 
 !!! danger "Never Use Superuser Connections"
     Superusers bypass all RLS policies:
-    
+
     - Create dedicated application users
     - Use Secrets Manager for credential rotation
     - Monitor for superuser access

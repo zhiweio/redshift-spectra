@@ -106,21 +106,21 @@ SPECTRA_DYNAMODB_SESSIONS_TABLE_NAME=spectra-sessions
 
 class SessionService:
     """Manages Redshift session caching per tenant."""
-    
+
     def get_or_create_session_id(
         self,
         tenant_id: str,
         db_user: str,
     ) -> tuple[str | None, bool]:
         """Get existing session or signal that new one is needed."""
-        
+
         # Try to get active session
         session = self.get_active_session(tenant_id, db_user)
-        
+
         if session and not session.is_expired:
             self.update_last_used(session.session_id)
             return session.session_id, False  # Existing session
-        
+
         return None, True  # Need new session
 ```
 
@@ -137,29 +137,29 @@ def execute_statement(
     use_session: bool = True,
 ) -> str:
     """Execute SQL with session reuse."""
-    
+
     session_id = None
     if use_session and tenant_id:
         session_id, is_new = self.session_service.get_or_create_session_id(
             tenant_id=tenant_id,
             db_user=db_user,
         )
-    
+
     params = {
         "Database": self.settings.redshift_database,
         "Sql": sql,
         "DbUser": db_user,
     }
-    
+
     if session_id:
         # Reuse existing session
         params["SessionId"] = session_id
     else:
         # Create new session with keep-alive
         params["SessionKeepAliveSeconds"] = self.settings.redshift_session_keep_alive_seconds
-    
+
     response = self.client.execute_statement(**params)
-    
+
     # Store new session if created
     if not session_id and tenant_id:
         new_session_id = response.get("SessionId")
@@ -169,7 +169,7 @@ def execute_statement(
                 tenant_id=tenant_id,
                 db_user=db_user,
             )
-    
+
     return response["Id"]
 ```
 
@@ -191,11 +191,11 @@ try:
     response = self.client.execute_statement(**params)
 except ClientError as e:
     error_code = e.response["Error"]["Code"]
-    
+
     if error_code in ("InvalidSessionException", "SessionNotFoundException"):
         # Invalidate cached session
         self.session_service.invalidate_session(session_id)
-        
+
         # Retry without session (creates new one)
         return self.execute_statement(
             sql=sql,
@@ -214,41 +214,41 @@ Expired sessions are automatically cleaned up:
 def cleanup_expired_sessions(self) -> int:
     """Remove expired sessions from cache."""
     now = datetime.now(UTC)
-    
+
     # DynamoDB TTL handles automatic deletion
     # This method is for manual cleanup if needed
-    
+
     response = self.table.scan(
         FilterExpression=Attr("expires_at").lt(now.isoformat())
     )
-    
+
     deleted = 0
     for item in response.get("Items", []):
         self.table.delete_item(Key={"session_id": item["session_id"]})
         deleted += 1
-    
+
     return deleted
 ```
 
 ## Best Practices
 
 !!! tip "Tune Keep-Alive Duration"
-    
+
     Set `SessionKeepAliveSeconds` based on your query patterns:
     - Frequent queries: 3600s (1 hour)
     - Infrequent queries: 300s (5 minutes)
     - Maximum allowed: 86400s (24 hours)
 
 !!! tip "Monitor Session Hit Rate"
-    
+
     Track session cache hits vs misses. Target > 90% hit rate for optimal performance.
 
 !!! warning "Session Limits"
-    
+
     Redshift has limits on concurrent sessions. Monitor and adjust based on your workload.
 
 !!! warning "Tenant Isolation"
-    
+
     Sessions are tenant-specific. Never share sessions across tenants.
 
 ## Monitoring

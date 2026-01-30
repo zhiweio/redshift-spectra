@@ -6,7 +6,7 @@
 
 locals {
   aws_region = "us-east-1"
-  
+
   # LocalStack endpoint configuration
   localstack = {
     endpoint = "http://localhost:4566"

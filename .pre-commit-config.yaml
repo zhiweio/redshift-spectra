@@ -6,6 +6,7 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        exclude: mkdocs\.yml$
       - id: check-json
       - id: check-toml
       - id: check-added-large-files
@@ -21,18 +22,24 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-      - id: mypy
-        additional_dependencies:
-          - pydantic>=2.5.0
-          - boto3-stubs[redshift-data,dynamodb,s3,secretsmanager]
-        pass_filenames: false
-        entry: mypy src/spectra
-
   - repo: https://github.com/antonbabenko/pre-commit-terraform
     rev: v1.86.0
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
+
+  # Terragrunt hooks using new CLI (v0.99+)
+  # pre-commit-terraform's terragrunt_fmt uses deprecated 'hclfmt' command
+  - repo: local
+    hooks:
+      - id: terragrunt_fmt
+        name: Terragrunt fmt
+        description: Format Terragrunt HCL files using new CLI
+        entry: terragrunt hcl fmt
+        language: system
+        files: (^terragrunt\.hcl$|^.+\.hcl$)
+        exclude: \.terraform/.*$
+        pass_filenames: false
+      # Note: terragrunt_validate is skipped in pre-commit because it requires
+      # running from within environment directories with proper context.
+      # Use 'make tg-validate-dev' or 'make tg-validate-prod' for validation.

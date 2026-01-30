@@ -15,20 +15,20 @@ sequenceDiagram
 
     Client->>API: POST /queries
     API->>Lambda: Invoke Handler
-    
+
     Note over Lambda: Validate SQL
     Note over Lambda: Apply tenant context
     Note over Lambda: Enforce LIMIT
-    
+
     Lambda->>Redshift: execute_statement()
-    
+
     loop Wait for completion
         Lambda->>Redshift: describe_statement()
     end
-    
+
     Lambda->>Redshift: get_statement_result()
     Redshift-->>Lambda: Result data
-    
+
     Lambda-->>Client: {data, metadata}
 ```
 
@@ -52,14 +52,14 @@ The synchronous design provides significant advantages for interactive use cases
 ```mermaid
 flowchart TD
     Start{Your Query}
-    
+
     Start --> Size{"Result Size?"}
     Size -->|"≤ 10K rows"| Time{"Execution Time?"}
     Size -->|"> 10K rows"| Bulk["Use Bulk API"]
-    
+
     Time -->|"< 5 minutes"| Query["Use Query API ✓"]
     Time -->|"> 5 minutes"| Bulk
-    
+
     Query --> Features["- Inline JSON response<br>- Immediate results<br>- No polling"]
     Bulk --> BulkFeatures["- S3 export<br>- Unlimited rows<br>- 24-hour timeout"]
 ```
@@ -165,23 +165,23 @@ The Query API automatically manages row limits to ensure predictable response si
 ```mermaid
 flowchart TD
     Query["User Query"]
-    
+
     Query --> Check{"Has LIMIT clause?"}
-    
+
     Check -->|No| Inject["Inject LIMIT (threshold + 1)"]
     Check -->|Yes| Compare{"LIMIT > threshold?"}
-    
+
     Compare -->|Yes| Replace["Replace with LIMIT (threshold + 1)"]
     Compare -->|No| Keep["Keep original LIMIT"]
-    
+
     Inject --> Execute
     Replace --> Execute
     Keep --> Execute
-    
+
     Execute["Execute Query"]
-    
+
     Execute --> Count{"Rows returned?"}
-    
+
     Count -->|"> threshold"| Truncate["Truncate to threshold<br>Set truncated=true"]
     Count -->|"≤ threshold"| Return["Return all rows<br>Set truncated=false"]
 ```
@@ -189,7 +189,7 @@ flowchart TD
 ### How It Works
 
 1. **No LIMIT in query**: System adds `LIMIT (threshold + 1)` automatically
-2. **LIMIT exceeds threshold**: Replaced with `LIMIT (threshold + 1)`  
+2. **LIMIT exceeds threshold**: Replaced with `LIMIT (threshold + 1)`
 3. **LIMIT within threshold**: Kept as-is
 
 The extra row (threshold + 1) allows detection of truncation without fetching all data.
@@ -235,7 +235,7 @@ flowchart LR
     Sanitize --> Parse["Parse Statement"]
     Parse --> Check["Check Patterns"]
     Check --> Validate{"Valid?"}
-    
+
     Validate -->|Yes| Execute["Execute"]
     Validate -->|No| Reject["Reject with Error"]
 ```
@@ -372,7 +372,7 @@ All queries are automatically logged for security auditing and debugging:
 flowchart LR
     Query["Query Request"] --> Log["DynamoDB Log"]
     Log --> Data["Captured Data"]
-    
+
     Data --> Fields["- Job ID<br>- Tenant ID<br>- SQL (sanitized)<br>- Execution time<br>- Status<br>- Row count<br>- Timestamp"]
 ```
 
