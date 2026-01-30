@@ -263,7 +263,7 @@ xychart-beta
     title "Delivery Method Comparison"
     x-axis ["100 rows", "1K rows", "10K rows", "100K rows", "1M rows"]
     y-axis "Response Time (s)" 0 --> 60
-    bar [0.5, 0.8, 2, "N/A", "N/A"]
+    bar [0.5, 0.8, 2, 0, 0]
     line [2, 3, 5, 15, 45]
 ```
 
