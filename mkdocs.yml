@@ -76,7 +76,7 @@ extra:
     property: G-XXXXXXXXXX  # Replace with your GA4 ID or remove this section
 
 extra_javascript:
-  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js
 
 extra_css: []
 
