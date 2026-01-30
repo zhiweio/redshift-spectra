@@ -1,296 +1,306 @@
 # SQL Security
 
-Redshift Spectra implements comprehensive SQL security measures to prevent injection attacks and unauthorized operations.
+SQL injection is one of the most dangerous attack vectors against database systems. Redshift Spectra implements comprehensive SQL validation to prevent malicious queries from reaching your data warehouse.
 
-## Overview
+## Defense in Depth
+
+SQL security in Redshift Spectra is implemented at multiple layers:
 
 ```mermaid
 flowchart TB
-    subgraph Input["Client Input"]
-        SQL[SQL Query]
+    subgraph Layers["SQL Security Layers"]
+        direction TB
+        
+        subgraph L1["Layer 1: Request Validation"]
+            REQ[Request Model<br/>Basic pattern blocking]
+        end
+        
+        subgraph L2["Layer 2: SQL Validator"]
+            VAL[Comprehensive Analysis<br/>Pattern matching · Complexity limits]
+        end
+        
+        subgraph L3["Layer 3: Parameterization"]
+            PARAM[Parameter Binding<br/>Value separation]
+        end
+        
+        subgraph L4["Layer 4: Database Permissions"]
+            PERM[RBAC/RLS<br/>Query execution limits]
+        end
     end
     
-    subgraph Validation["Multi-Layer Validation"]
-        L1[Model Validation<br/>Basic Checks]
-        L2[SQL Validator<br/>Security Checks]
-        L3[Redshift RLS<br/>Data Filtering]
+    SQL[User SQL] --> L1 --> L2 --> L3 --> L4 --> RS[(Redshift)]
+```
+
+Even if an attacker bypasses one layer, others continue to protect your data.
+
+## SQL Validator
+
+The SQL Validator is the primary defense against SQL injection and query abuse. It analyzes queries before execution using multiple techniques.
+
+### Security Levels
+
+Three security levels are available, each with different trade-offs:
+
+```mermaid
+flowchart LR
+    subgraph Levels["Security Levels"]
+        direction TB
+        
+        STRICT["STRICT<br/>━━━━━━━━<br/>• SELECT only<br/>• No subqueries<br/>• No CTEs<br/>• Minimal functions"]
+        
+        STANDARD["STANDARD<br/>━━━━━━━━<br/>• SELECT only<br/>• Subqueries allowed<br/>• CTEs allowed<br/>• Safe functions"]
+        
+        PERMISSIVE["PERMISSIVE<br/>━━━━━━━━<br/>• SELECT only<br/>• All subqueries<br/>• All CTEs<br/>• More functions"]
     end
     
-    subgraph Execution["Safe Execution"]
-        PARAM[Parameterized Query]
-        DBUSER[Tenant db_user]
+    STRICT -.->|"More restrictive"| STANDARD -.->|"Less restrictive"| PERMISSIVE
+```
+
+| Level | Use Case | Query Complexity |
+|-------|----------|------------------|
+| **STRICT** | Untrusted external users | Simple queries only |
+| **STANDARD** | Internal applications | Most analytical queries |
+| **PERMISSIVE** | Trusted data engineers | Complex analytical queries |
+
+### Blocked Patterns
+
+The validator blocks dangerous SQL patterns regardless of security level:
+
+```mermaid
+flowchart TB
+    subgraph Blocked["❌ Always Blocked"]
+        direction TB
+        
+        DDL["DDL Statements<br/>DROP, CREATE, ALTER, TRUNCATE"]
+        DML["DML Statements<br/>INSERT, UPDATE, DELETE"]
+        ADMIN["Admin Operations<br/>GRANT, REVOKE, COPY"]
+        SYSTEM["System Access<br/>pg_catalog, stl_*, stv_*"]
+        DANGEROUS["Dangerous Functions<br/>pg_read_file, pg_terminate"]
     end
     
-    SQL --> L1
-    L1 --> L2
-    L2 --> PARAM
-    PARAM --> DBUSER
-    DBUSER --> L3
-    L3 --> RESULT[Filtered Results]
+    SQL[User SQL] --> CHECK{Contains Blocked Pattern?}
+    CHECK -->|Yes| REJECT[Reject with Error]
+    CHECK -->|No| CONTINUE[Continue Validation]
 ```
 
-## Security Layers
+### Pattern Detection
 
-### Layer 1: Model Validation
+The validator uses multiple detection techniques:
 
-Basic validation at the request parsing level:
+**1. Statement Type Detection**
 
-```python
-@field_validator("sql")
-def validate_sql(cls, v: str) -> str:
-    # Must be SELECT or WITH (CTE)
-    if not (upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")):
-        raise ValueError("Only SELECT statements are allowed")
+Only SELECT statements (and WITH...SELECT for CTEs) are allowed:
+
+```mermaid
+flowchart LR
+    SQL[Query] --> PARSE[Parse First Token]
+    PARSE --> CHECK{SELECT or WITH?}
+    CHECK -->|No| DENY[Deny]
+    CHECK -->|Yes| ALLOW[Allow]
+```
+
+**2. Dangerous Pattern Matching**
+
+Regular expressions detect dangerous patterns:
+
+| Category | Patterns Blocked |
+|----------|-----------------|
+| DDL | `DROP TABLE`, `CREATE TABLE`, `ALTER TABLE` |
+| DML | `INSERT INTO`, `UPDATE SET`, `DELETE FROM` |
+| Stacked queries | `; DROP`, `; DELETE`, `; INSERT` |
+| Comment injection | `/*...*/DROP`, `--...DELETE` |
+| System tables | `pg_catalog.`, `information_schema.` |
+| Hex encoding | `0x44524f50` (encoded DROP) |
+
+**3. Complexity Analysis**
+
+Queries are analyzed for complexity to prevent resource abuse:
+
+```mermaid
+flowchart TB
+    SQL[Query] --> ANALYZE[Analyze Complexity]
     
-    # Block obviously dangerous patterns
-    dangerous = ["DROP", "DELETE", "INSERT", "UPDATE", "CREATE", "ALTER"]
-    for pattern in dangerous:
-        if pattern in upper_sql:
-            raise ValueError(f"Dangerous operation not allowed: {pattern}")
-```
-
-### Layer 2: SQL Validator
-
-Comprehensive security analysis:
-
-| Check | Description | Error Code |
-|-------|-------------|------------|
-| Statement Type | Only SELECT allowed | `FORBIDDEN_STATEMENT` |
-| Injection Patterns | Detect common attack vectors | `INJECTION_DETECTED` |
-| System Objects | Block pg_catalog, stl_, etc. | `FORBIDDEN_OBJECT` |
-| Dangerous Functions | Block pg_read_file, etc. | `FORBIDDEN_FUNCTION` |
-| Query Complexity | Limit JOINs, subqueries | `TOO_MANY_JOINS` |
-
-### Layer 3: Database Security
-
-Redshift Row-Level Security filters all results:
-
-```sql
--- User only sees their own data
-SELECT * FROM sales 
--- RLS applies: WHERE tenant_id = current_user
-```
-
-## SQL Injection Prevention
-
-### Detected Patterns
-
-The validator detects these attack patterns:
-
-```python
-INJECTION_PATTERNS = [
-    # Comment injection
-    (r"--\s*$", "SQL comment at end of statement"),
-    (r"/\*.*?\*/", "Block comment detected"),
+    ANALYZE --> JOINS{JOIN count > limit?}
+    JOINS -->|Yes| DENY1[Deny: Too many JOINs]
+    JOINS -->|No| SUBQ{Subquery depth > limit?}
     
-    # Union-based injection
-    (r"\bUNION\s+(ALL\s+)?SELECT\b", "UNION SELECT pattern"),
+    SUBQ -->|Yes| DENY2[Deny: Too many subqueries]
+    SUBQ -->|No| LENGTH{Query length > limit?}
     
-    # Stacked queries
-    (r";\s*(SELECT|INSERT|DELETE)", "Stacked query detected"),
+    LENGTH -->|Yes| DENY3[Deny: Query too long]
+    LENGTH -->|No| ALLOW[Allow]
+```
+
+### Complexity Limits
+
+| Limit | Default | Purpose |
+|-------|---------|---------|
+| Max JOINs | 10 | Prevent expensive cross-joins |
+| Max Subqueries | 5 | Limit query complexity |
+| Max Query Length | 100KB | Prevent buffer overflow |
+| Max UNION clauses | 0 (blocked) | Prevent result set manipulation |
+
+## LIMIT Enforcement
+
+The Query API automatically enforces result limits to prevent memory exhaustion:
+
+```mermaid
+flowchart TB
+    subgraph LimitLogic["LIMIT Injection Logic"]
+        direction TB
+        
+        Q1["Query without LIMIT"] --> ADD["Add LIMIT (threshold+1)"]
+        Q2["Query with LIMIT > threshold"] --> REPLACE["Replace with LIMIT (threshold+1)"]
+        Q3["Query with LIMIT <= threshold"] --> KEEP["Keep original LIMIT"]
+    end
     
-    # Time-based attacks
-    (r"\b(SLEEP|WAITFOR|PG_SLEEP)\s*\(", "Time-based attack"),
-]
-```
-
-### Example Attacks Blocked
-
-**Comment Injection:**
-```sql
--- BLOCKED: Comment used to bypass filters
-SELECT * FROM users WHERE id = 1 --
-```
-
-**Union-Based Injection:**
-```sql
--- BLOCKED: UNION SELECT for data exfiltration
-SELECT name FROM products UNION SELECT password FROM users
-```
-
-**Stacked Queries:**
-```sql
--- BLOCKED: Multiple statements
-SELECT * FROM sales; DROP TABLE users
-```
-
-**System Table Access:**
-```sql
--- BLOCKED: Access to system catalogs
-SELECT * FROM pg_catalog.pg_user
-```
-
-## Forbidden Objects
-
-Access to these objects is blocked:
-
-| Pattern | Description |
-|---------|-------------|
-| `pg_catalog.*` | PostgreSQL system catalog |
-| `information_schema.*` | Schema metadata |
-| `stl_*` | Redshift system logs |
-| `stv_*` | Redshift system views |
-| `svl_*` | Redshift SVL views |
-| `svv_*` | Redshift SVV views |
-| `pg_*` | PostgreSQL internals |
-
-## Forbidden Functions
-
-These functions are blocked to prevent system access:
-
-```python
-FORBIDDEN_FUNCTIONS = {
-    # File operations
-    "pg_read_file",
-    "pg_read_binary_file",
-    "pg_ls_dir",
+    subgraph Detection["Truncation Detection"]
+        direction TB
+        
+        EXEC["Execute Query"] --> CHECK{Rows > threshold?}
+        CHECK -->|Yes| TRUNCATE["Truncate to threshold<br/>Set truncated=true"]
+        CHECK -->|No| RETURN["Return all rows"]
+    end
     
-    # Process control
-    "pg_terminate_backend",
-    "pg_cancel_backend",
+    LimitLogic --> Detection
+```
+
+The LIMIT+1 strategy allows detection of truncation without executing the query twice.
+
+## Parameter Binding
+
+Parameterized queries separate SQL structure from data values:
+
+```mermaid
+flowchart TB
+    subgraph Vulnerable["❌ String Concatenation"]
+        BAD["SELECT * FROM users WHERE id = '" + user_input + "'"]
+        ATTACK["user_input = ' OR 1=1 --"]
+        RESULT1["SELECT * FROM users WHERE id = '' OR 1=1 --'"]
+    end
     
-    # Configuration
-    "current_setting",
-    "set_config",
-}
+    subgraph Safe["✅ Parameter Binding"]
+        GOOD["SELECT * FROM users WHERE id = :user_id"]
+        PARAM["user_id = ' OR 1=1 --"]
+        RESULT2["Parameter treated as literal string<br/>No injection possible"]
+    end
 ```
 
-## Security Levels
+Use parameters for any user-provided values:
 
-Configure the security level in your environment:
+| Parameter Type | Supported |
+|---------------|-----------|
+| String | ✓ |
+| Integer | ✓ |
+| Float | ✓ |
+| Boolean | ✓ |
+| Null | ✓ |
+| Date/Time | ✓ (as string) |
 
-=== "Strict"
+## Attack Prevention Examples
 
-    ```bash
-    SPECTRA_SQL_SECURITY_LEVEL=strict
-    ```
+### SQL Injection Attempts
+
+```mermaid
+flowchart TB
+    subgraph Attacks["Attack Attempts"]
+        A1["SELECT * FROM users; DROP TABLE users"]
+        A2["SELECT * FROM users WHERE 1=1 --"]
+        A3["SELECT * FROM users UNION SELECT * FROM secrets"]
+        A4["SELECT * FROM pg_catalog.pg_user"]
+    end
     
-    - Only SELECT statements
-    - Limited function whitelist
-    - No subqueries beyond limit
-    - Best for: High-security environments
-
-=== "Standard (Default)"
-
-    ```bash
-    SPECTRA_SQL_SECURITY_LEVEL=standard
-    ```
+    subgraph Detection["Detection & Response"]
+        D1["Stacked query detected"] --> DENY1[403 Forbidden]
+        D2["Comment injection detected"] --> DENY2[403 Forbidden]
+        D3["UNION not allowed"] --> DENY3[403 Forbidden]
+        D4["System table access blocked"] --> DENY4[403 Forbidden]
+    end
     
-    - SELECT with common functions
-    - Subqueries allowed
-    - CTEs allowed
-    - Best for: Most use cases
+    A1 --> D1
+    A2 --> D2
+    A3 --> D3
+    A4 --> D4
+```
 
-=== "Permissive"
+### Real-World Attack Patterns
 
-    ```bash
-    SPECTRA_SQL_SECURITY_LEVEL=permissive
-    ```
+| Attack | Detection Method | Response |
+|--------|-----------------|----------|
+| `'; DROP TABLE --` | Stacked query pattern | Blocked |
+| `UNION SELECT password FROM users` | UNION pattern | Blocked |
+| `' OR '1'='1` | Parameterization prevents | No effect |
+| `0x44524f50205441424c45` | Hex encoding detection | Blocked |
+| `SELECT * FROM stl_query` | System table pattern | Blocked |
+
+## Validation Response
+
+When validation fails, detailed error information is returned:
+
+```mermaid
+flowchart TB
+    FAIL[Validation Failed] --> ERROR[Error Response]
     
-    - Most functions allowed
-    - Higher complexity limits
-    - Still blocks injection patterns
-    - Best for: Power users with trusted access
-
-## Configuration
-
-```bash
-# Security level
-SPECTRA_SQL_SECURITY_LEVEL=standard
-
-# Query length limit (characters)
-SPECTRA_SQL_MAX_QUERY_LENGTH=100000
-
-# Complexity limits
-SPECTRA_SQL_MAX_JOINS=10
-SPECTRA_SQL_MAX_SUBQUERIES=5
-
-# Feature toggles
-SPECTRA_SQL_ALLOW_CTE=true
-SPECTRA_SQL_ALLOW_UNION=false
+    ERROR --> CODE["error_code:<br/>FORBIDDEN_STATEMENT"]
+    ERROR --> MSG["message:<br/>SQL contains forbidden pattern: DROP"]
+    ERROR --> DETAILS["details:<br/>pattern_matched, position"]
 ```
 
-## Parameterized Queries
+Error codes:
 
-Always use parameters for user-provided values:
-
-```bash
-# SAFE: Use parameters
-curl -X POST "$API_URL/queries" \
-  -d '{
-    "sql": "SELECT * FROM orders WHERE customer_id = :customer_id",
-    "parameters": [
-      {"name": "customer_id", "value": "cust-123"}
-    ]
-  }'
-
-# UNSAFE: Don't concatenate values
-# sql = f"SELECT * FROM orders WHERE customer_id = '{user_input}'"
-```
-
-### Parameter Validation
-
-Parameters are also validated:
-
-```python
-class QueryParameter(BaseModel):
-    name: str = Field(..., min_length=1, max_length=128)
-    value: str | int | float | bool | None
-    
-    @field_validator("name")
-    def validate_name(cls, v: str) -> str:
-        if not v.isidentifier():
-            raise ValueError("Parameter name must be a valid identifier")
-        return v
-```
-
-## Error Responses
-
-Security violations return clear error messages:
-
-```json
-{
-  "error": {
-    "code": "SQL_VALIDATION_FAILED",
-    "message": "SQL validation failed: Only SELECT statements are allowed. Detected: DROP",
-    "details": {
-      "error_code": "FORBIDDEN_STATEMENT",
-      "detected_type": "DROP"
-    }
-  }
-}
-```
-
-## Audit Logging
-
-All SQL validation failures are logged:
-
-```json
-{
-  "level": "WARNING",
-  "message": "SQL validation failed",
-  "error_code": "INJECTION_DETECTED",
-  "pattern": "UNION SELECT pattern detected",
-  "tenant_id": "tenant-123",
-  "source_ip": "192.168.1.100",
-  "timestamp": "2026-01-29T10:00:00Z"
-}
-```
+| Code | Description |
+|------|-------------|
+| `FORBIDDEN_STATEMENT` | Blocked statement type detected |
+| `FORBIDDEN_PATTERN` | Dangerous pattern detected |
+| `COMPLEXITY_EXCEEDED` | Query too complex |
+| `EMPTY_QUERY` | No SQL provided |
+| `SYSTEM_TABLE_ACCESS` | Attempt to access system tables |
 
 ## Best Practices
 
 !!! tip "Always Use Parameters"
+    Never concatenate user input into SQL strings:
     
-    Never concatenate user input into SQL strings. Use the `parameters` field.
+    - Use named parameters (`:param_name`)
+    - Let the validator handle escaping
+    - Audit parameter usage in logs
 
-!!! tip "Start Strict, Relax as Needed"
+!!! tip "Start with STRICT Mode"
+    For external-facing APIs:
     
-    Begin with `strict` security level and only relax if required.
+    - Begin with STRICT security level
+    - Relax only if specific queries require it
+    - Document why relaxation is needed
 
 !!! warning "Monitor Validation Failures"
+    High validation failure rates may indicate:
     
-    Set up alerts for repeated validation failures - they may indicate attack attempts.
+    - Attack attempts in progress
+    - Misconfigured client applications
+    - Need for user education
 
-!!! danger "Never Disable Security"
+!!! info "Validation is Not a Replacement"
+    SQL validation complements, but doesn't replace:
     
-    The security validator should never be bypassed, even for "trusted" users.
+    - Row-Level Security (data isolation)
+    - RBAC (permission control)
+    - Parameter binding (injection prevention)
+
+## Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `SPECTRA_SQL_SECURITY_LEVEL` | `standard` | Security level: strict, standard, permissive |
+| `SPECTRA_SQL_MAX_QUERY_LENGTH` | `100000` | Maximum query length in characters |
+| `SPECTRA_SQL_MAX_JOINS` | `10` | Maximum JOIN clauses |
+| `SPECTRA_SQL_MAX_SUBQUERIES` | `5` | Maximum subquery depth |
+| `SPECTRA_SQL_ALLOW_CTE` | `true` | Allow WITH clauses (CTEs) |
+| `SPECTRA_SQL_ALLOW_UNION` | `false` | Allow UNION (disabled by default) |
+
+## Audit Trail
+
+All SQL validation events are logged:
+
+- **Passed validations** — With normalized SQL and warnings
+- **Failed validations** — With error code and matched pattern
+- **Complexity metrics** — JOIN count, subquery depth, query length

@@ -8,55 +8,97 @@ Deploy Redshift Spectra and make your first API call in under 10 minutes.
 flowchart LR
     A[1. Configure] --> B[2. Build]
     B --> C[3. Deploy]
-    C --> D[4. Test]
+    C --> D[4. Query]
 ```
+
+This guide walks you through the fastest path from zero to a working Redshift Spectra deployment. By the end, you'll have a fully functional API that executes queries against your Amazon Redshift cluster.
+
+---
+
+## Prerequisites
+
+Before starting, ensure you have:
+
+- **AWS Account** with administrative access
+- **Amazon Redshift cluster** (Serverless or Provisioned)
+- **AWS CLI** configured with appropriate credentials
+- **Terraform** 1.5+ and **Terragrunt** 0.50+ installed
+- **Python 3.11+** for building Lambda packages
+- **Make** for running build commands
+
+---
 
 ## Step 1: Configure Environment
 
-Create your environment configuration:
+Clone the repository and set up your configuration:
 
 ```bash
-# Copy the template
-cp .env.template .env
+# Clone the repository
+git clone https://github.com/your-org/redshift-spectra.git
+cd redshift-spectra
 
-# Edit with your settings
-vim .env
+# Copy the environment template
+cp .env.template .env
 ```
 
-**Minimum required settings:**
+Edit `.env` with your AWS and Redshift settings:
 
 ```bash
+# AWS Configuration
+AWS_REGION=us-east-1
+
 # Redshift Configuration
 SPECTRA_REDSHIFT_CLUSTER_ID=my-redshift-cluster
 SPECTRA_REDSHIFT_DATABASE=analytics
 SPECTRA_REDSHIFT_SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:redshift/credentials
 
-# S3 Configuration
+# S3 Configuration (for Bulk API exports)
 SPECTRA_S3_BUCKET_NAME=my-spectra-exports
+
+# Multi-tenant Configuration
+SPECTRA_TENANT_ISOLATION=database  # Options: none, schema, database
 ```
+
+!!! tip "Secrets Manager Setup"
+    Your Redshift credentials should be stored in AWS Secrets Manager with the following structure:
+    ```json
+    {
+      "username": "spectra_user",
+      "password": "your-password",
+      "host": "cluster.xxxxx.region.redshift.amazonaws.com",
+      "port": 5439,
+      "database": "analytics"
+    }
+    ```
+
+---
 
 ## Step 2: Build Lambda Packages
 
 Build the Lambda layer and function packages:
 
 ```bash
-# Build everything
+# Install development dependencies
+make install-dev
+
+# Build all Lambda packages
 make package-all
 ```
 
-This creates:
+This creates the following artifacts:
 
 ```
 dist/lambda/
 ├── layer.zip          # Shared dependencies (~50MB)
 ├── api-handler.zip    # API handler code
-├── worker.zip         # Async worker code
-└── authorizer.zip     # Auth handler code
+└── authorizer.zip     # Custom authorizer code
 ```
+
+---
 
 ## Step 3: Deploy Infrastructure
 
-Deploy to your AWS account using Terragrunt:
+Deploy the infrastructure to your AWS account:
 
 ```bash
 # Initialize Terragrunt
@@ -65,11 +107,11 @@ make tg-init-dev
 # Preview changes
 make tg-plan-dev
 
-# Apply changes
+# Deploy infrastructure
 make tg-apply-dev
 ```
 
-After deployment, get your API endpoint:
+After deployment, retrieve your API endpoint:
 
 ```bash
 make tg-output-dev
@@ -82,22 +124,34 @@ api_endpoint = "https://abc123.execute-api.us-east-1.amazonaws.com/v1"
 api_key = "spectra_demo_abc123xyz"
 ```
 
-## Step 4: Make Your First API Call
+!!! note "Deployment Time"
+    Initial deployment typically takes 5-10 minutes to provision all AWS resources.
 
-### Submit a Query
+---
+
+## Step 4: Make Your First Query
+
+Now let's execute a query against your Redshift cluster!
+
+### Set Environment Variables
 
 ```bash
-# Set your API endpoint
 export API_URL="https://abc123.execute-api.us-east-1.amazonaws.com/v1"
 export API_KEY="spectra_demo_abc123xyz"
+export TENANT_ID="demo-tenant"
+```
 
-# Submit a query
+### Execute a Query
+
+The Query API is **synchronous** — you submit a query and receive results immediately in the response:
+
+```bash
 curl -X POST "$API_URL/queries" \
   -H "Authorization: Bearer $API_KEY" \
-  -H "X-Tenant-ID: demo-tenant" \
+  -H "X-Tenant-ID: $TENANT_ID" \
   -H "Content-Type: application/json" \
   -d '{
-    "sql": "SELECT table_name FROM information_schema.tables LIMIT 10"
+    "sql": "SELECT table_name, table_type FROM information_schema.tables LIMIT 5"
   }'
 ```
 
@@ -105,53 +159,28 @@ curl -X POST "$API_URL/queries" \
 
 ```json
 {
-  "job_id": "job-550e8400-e29b-41d4-a716-446655440000",
-  "status": "QUEUED",
-  "submitted_at": "2026-01-29T10:00:00Z"
-}
-```
-
-### Check Job Status
-
-```bash
-curl "$API_URL/jobs/job-550e8400-e29b-41d4-a716-446655440000" \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-**Response:**
-
-```json
-{
-  "job_id": "job-550e8400-e29b-41d4-a716-446655440000",
-  "status": "COMPLETED",
-  "row_count": 10,
-  "completed_at": "2026-01-29T10:00:05Z"
-}
-```
-
-### Get Results
-
-```bash
-curl "$API_URL/jobs/job-550e8400-e29b-41d4-a716-446655440000/results" \
-  -H "Authorization: Bearer $API_KEY"
-```
-
-**Response:**
-
-```json
-{
   "data": [
-    {"table_name": "users"},
-    {"table_name": "orders"},
-    {"table_name": "products"}
+    {"table_name": "users", "table_type": "BASE TABLE"},
+    {"table_name": "orders", "table_type": "BASE TABLE"},
+    {"table_name": "products", "table_type": "BASE TABLE"},
+    {"table_name": "inventory", "table_type": "BASE TABLE"},
+    {"table_name": "sales_view", "table_type": "VIEW"}
   ],
   "metadata": {
-    "columns": ["table_name"],
-    "row_count": 10,
-    "format": "json"
+    "columns": ["table_name", "table_type"],
+    "column_types": ["VARCHAR", "VARCHAR"],
+    "row_count": 5,
+    "total_rows": 5,
+    "truncated": false,
+    "execution_time_ms": 156,
+    "query_id": "abc123-def456"
   }
 }
 ```
+
+That's it! Your query executed on Redshift and returned results directly in the response.
+
+---
 
 ## Understanding the Flow
 
@@ -160,48 +189,199 @@ sequenceDiagram
     participant Client
     participant API as API Gateway
     participant Lambda
-    participant DynamoDB
     participant Redshift
 
     Client->>API: POST /queries
     API->>Lambda: Invoke handler
-    Lambda->>DynamoDB: Create job record
-    Lambda->>Redshift: Execute statement
-    Lambda-->>Client: Return job_id
-    
-    Note over Lambda,Redshift: Query executes async
-    
-    Client->>API: GET /jobs/{id}
-    API->>Lambda: Check status
-    Lambda->>DynamoDB: Get job
-    Lambda-->>Client: Return status
-    
-    Client->>API: GET /jobs/{id}/results
-    API->>Lambda: Get results
-    Lambda->>Redshift: Fetch results
-    Lambda-->>Client: Return data
+    Lambda->>Lambda: Validate SQL
+    Lambda->>Lambda: Apply tenant context
+    Lambda->>Redshift: Execute query
+    Redshift-->>Lambda: Return results
+    Lambda-->>API: Format response
+    API-->>Client: Return data + metadata
 ```
+
+The synchronous design provides:
+
+- **Simplicity**: Single request-response, no polling required
+- **Low latency**: Results returned immediately
+- **Predictability**: Automatic LIMIT enforcement prevents runaway queries
+
+---
+
+## Query Examples
+
+### Aggregate Query
+
+```bash
+curl -X POST "$API_URL/queries" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "SELECT region, COUNT(*) as order_count, SUM(amount) as total FROM orders GROUP BY region"
+  }'
+```
+
+### With Custom Limit
+
+```bash
+curl -X POST "$API_URL/queries" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "SELECT * FROM large_table",
+    "parameters": {
+      "limit": 100
+    }
+  }'
+```
+
+### With Timeout
+
+```bash
+curl -X POST "$API_URL/queries" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sql": "SELECT * FROM complex_view WHERE date > CURRENT_DATE - 30",
+    "parameters": {
+      "timeout_seconds": 120
+    }
+  }'
+```
+
+---
+
+## Handling Large Result Sets
+
+When your query returns more rows than the configured limit, the response indicates truncation:
+
+```json
+{
+  "data": [...],
+  "metadata": {
+    "row_count": 10000,
+    "total_rows": 150000,
+    "truncated": true
+  }
+}
+```
+
+For complete data export, use the **Bulk API**:
+
+```bash
+# Create a bulk export job
+curl -X POST "$API_URL/bulk/jobs" \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "query",
+    "object": "orders",
+    "query": "SELECT * FROM orders WHERE year = 2024",
+    "content_type": "CSV",
+    "compression": "GZIP"
+  }'
+```
+
+See the [Bulk API Guide](../user-guide/bulk-api.md) for complete documentation.
+
+---
 
 ## Next Steps
 
-Now that you have a working API:
+Now that you have a working API, explore these topics:
 
-- [Configuration](configuration.md) - Customize your deployment
-- [Query API](../user-guide/query-api.md) - Learn the full API
-- [Multi-Tenancy](../concepts/multi-tenancy.md) - Set up tenant isolation
-- [Security](../security/overview.md) - Configure authentication
+<div class="grid cards" markdown>
+
+-   :material-cog:{ .lg .middle } **Configuration**
+
+    ---
+
+    Customize settings for your deployment
+
+    [:octicons-arrow-right-24: Configuration Guide](configuration.md)
+
+-   :material-api:{ .lg .middle } **Query API**
+
+    ---
+
+    Learn the full Query API capabilities
+
+    [:octicons-arrow-right-24: Query API Guide](../user-guide/query-api.md)
+
+-   :material-account-group:{ .lg .middle } **Multi-Tenancy**
+
+    ---
+
+    Set up isolated tenant environments
+
+    [:octicons-arrow-right-24: Multi-Tenancy](../concepts/multi-tenancy.md)
+
+-   :material-shield-lock:{ .lg .middle } **Security**
+
+    ---
+
+    Configure authentication and authorization
+
+    [:octicons-arrow-right-24: Security Overview](../security/overview.md)
+
+</div>
+
+---
 
 ## Troubleshooting
 
-### Common Issues
-
 ??? question "Query fails with 'Access Denied'"
-    Ensure your Redshift credentials in Secrets Manager have permission to execute queries. Check the db_user has appropriate grants.
+    Ensure your Redshift credentials in Secrets Manager have permission to execute queries. The database user needs SELECT permission on the target tables.
+    
+    Also verify the Lambda execution role has permission to access Secrets Manager.
 
-??? question "Lambda timeout errors"
-    Increase the Lambda timeout in Terragrunt configuration. For analytical queries, consider using async mode.
+??? question "Query times out"
+    The default timeout is 60 seconds. For longer-running queries:
+    
+    1. Increase `timeout_seconds` in the request (max: 300 seconds)
+    2. For very long queries, use the Bulk API which supports 24-hour timeouts
+    3. Optimize your query or add appropriate indexes
 
-??? question "S3 bucket access denied"
-    Verify the Lambda execution role has `s3:PutObject` and `s3:GetObject` permissions on your bucket.
+??? question "Results are truncated unexpectedly"
+    The Query API has a maximum row limit of 10,000 rows. If you need more:
+    
+    1. Use the Bulk API for complete data export
+    2. Add more specific WHERE clauses to reduce result size
+    3. Use aggregation to summarize data
 
-See [Development Guide](../development/testing.md) for debugging tips.
+??? question "Authentication fails with 401"
+    Verify your API key is correct and the `Authorization` header format:
+    ```bash
+    Authorization: Bearer your-api-key
+    ```
+    
+    Also ensure the `X-Tenant-ID` header is present for multi-tenant deployments.
+
+??? question "SQL validation error"
+    The API blocks potentially dangerous SQL patterns. Ensure your query:
+    
+    - Uses only SELECT statements (no DDL/DML)
+    - Doesn't contain comments that could hide injection attempts
+    - Doesn't use system tables that are restricted
+
+---
+
+## Cleanup
+
+To remove all deployed resources:
+
+```bash
+# Destroy infrastructure
+make tg-destroy-dev
+
+# Clean build artifacts
+make clean
+```
+
+!!! warning "Data Loss"
+    Destroying infrastructure will delete all DynamoDB tables and S3 data. Ensure you've exported any important data before cleanup.

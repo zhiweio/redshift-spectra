@@ -1,10 +1,18 @@
 # Architecture
 
-Deep dive into the Redshift Spectra system architecture and design decisions.
+This document provides a comprehensive overview of Redshift Spectra's architecture, explaining the design decisions that make it suitable for enterprise data platforms.
+
+## Design Philosophy
+
+Redshift Spectra is built on three fundamental principles:
+
+1. **Security by Design** — Tenant isolation is enforced at the database layer, not in application code
+2. **Serverless First** — No servers to manage, automatic scaling, pay-per-use pricing
+3. **Enterprise Ready** — Built for compliance, auditability, and operational excellence
 
 ## System Overview
 
-Redshift Spectra is a serverless middleware that provides secure, multi-tenant access to Amazon Redshift through a RESTful API.
+The architecture follows a layered approach where each layer has a specific responsibility:
 
 ```mermaid
 flowchart TB
@@ -13,295 +21,386 @@ flowchart TB
         APP[Applications]
         BI[BI Tools]
         ETL[ETL Pipelines]
-        DASH[Dashboards]
+        PARTNER[Partners]
     end
 
-    subgraph AWS["AWS Cloud"]
-        subgraph Edge["Edge Layer"]
-            APIGW[API Gateway<br/>Rate Limiting, Throttling]
-        end
-
-        subgraph Auth["Authorization"]
-            AUTHORIZER[Lambda Authorizer<br/>JWT/API Key Validation]
-        end
-
-        subgraph Compute["Compute Layer"]
-            API[API Handler<br/>Request Processing]
-            WORKER[Worker<br/>Async Processing]
-        end
-
-        subgraph Layer["Shared Layer"]
-            DEPS[Lambda Layer<br/>Dependencies]
-        end
-
-        subgraph State["State Management"]
-            DDB[(DynamoDB<br/>Jobs & Sessions)]
-        end
-
-        subgraph Storage["Storage"]
-            S3[(S3<br/>Large Results)]
-        end
-
-        subgraph Data["Data Layer"]
-            RS[(Redshift<br/>Data Warehouse)]
-            SM[Secrets Manager]
-        end
-
-        subgraph Observe["Observability"]
-            CW[CloudWatch]
-            XRAY[X-Ray]
-        end
+    subgraph Edge["Edge Layer"]
+        WAF[AWS WAF<br/>DDoS Protection]
+        APIGW[API Gateway<br/>Rate Limiting · Throttling]
     end
 
-    Clients --> APIGW
+    subgraph Security["Security Layer"]
+        AUTHORIZER[Lambda Authorizer<br/>JWT · API Key · IAM]
+        CONTEXT[Tenant Context<br/>Extraction & Validation]
+    end
+
+    subgraph Compute["Compute Layer"]
+        QUERY[Query Handler<br/>Synchronous Execution]
+        BULK[Bulk Handler<br/>Async Operations]
+        RESULT[Result Handler<br/>Data Retrieval]
+        STATUS[Status Handler<br/>Job Monitoring]
+    end
+
+    subgraph State["State Management"]
+        DDB[(DynamoDB<br/>Jobs · Sessions)]
+        CACHE[Session Cache<br/>Connection Reuse]
+    end
+
+    subgraph Storage["Storage Layer"]
+        S3[(Amazon S3<br/>Large Results)]
+    end
+
+    subgraph Data["Data Layer"]
+        RS[(Amazon Redshift<br/>RLS · RBAC · Encryption)]
+        SM[Secrets Manager<br/>Credential Rotation]
+    end
+
+    subgraph Observe["Observability"]
+        CW[CloudWatch<br/>Logs · Metrics · Alarms]
+        XRAY[X-Ray<br/>Distributed Tracing]
+    end
+
+    Clients --> WAF
+    WAF --> APIGW
     APIGW --> AUTHORIZER
-    AUTHORIZER --> API
-    API --> DEPS
-    WORKER --> DEPS
-    API --> DDB
-    API --> RS
-    WORKER --> DDB
-    WORKER --> RS
-    WORKER --> S3
-    API --> SM
-    DDB -.->|Stream| WORKER
-    API --> CW
-    WORKER --> CW
-    API --> XRAY
-    WORKER --> XRAY
+    AUTHORIZER --> CONTEXT
+    CONTEXT --> QUERY
+    CONTEXT --> BULK
+    CONTEXT --> RESULT
+    CONTEXT --> STATUS
+    
+    QUERY --> DDB
+    QUERY --> RS
+    BULK --> DDB
+    BULK --> S3
+    BULK --> RS
+    RESULT --> DDB
+    RESULT --> S3
+    STATUS --> DDB
+    
+    QUERY --> CACHE
+    CACHE --> DDB
+    RS --> SM
+    
+    QUERY --> CW
+    BULK --> CW
+    QUERY --> XRAY
+    BULK --> XRAY
 ```
 
-## Core Components
+## Layer-by-Layer Explanation
 
-### API Gateway
+### Edge Layer
 
-The entry point for all requests. Provides:
+The edge layer is your first line of defense and traffic management.
 
-- **Rate Limiting**: Per-tenant request throttling
-- **Request Validation**: Schema validation before Lambda invocation
-- **CORS**: Cross-origin resource sharing configuration
-- **SSL/TLS**: Encrypted communication
+**AWS WAF** provides protection against common web exploits:
 
-### Lambda Authorizer
+- SQL injection attempts (additional layer on top of our SQL validator)
+- Cross-site scripting (XSS) protection
+- Rate-based rules for DDoS mitigation
+- Geographic restrictions for compliance
 
-Validates authentication and extracts tenant context:
+**API Gateway** handles traffic management:
+
+- Request/response transformation
+- Per-tenant throttling limits
+- Request validation before Lambda invocation
+- API versioning support
+
+!!! info "Why API Gateway?"
+    We chose API Gateway over Application Load Balancer for its native integration with Lambda authorizers, built-in request validation, and usage plan features essential for multi-tenant platforms.
+
+### Security Layer
+
+The security layer authenticates requests and establishes tenant context.
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant A as Authorizer
+    participant H as Handler
+
+    C->>A: Request + Credentials
+    A->>A: Validate Token/Key
+    A->>A: Extract Tenant Context
+    A->>A: Determine Permissions
+    A-->>H: IAM Policy + Context
+    Note over H: Tenant context includes:<br/>- tenant_id<br/>- db_user<br/>- db_group<br/>- permissions
+```
+
+The **Lambda Authorizer** performs several critical functions:
+
+1. **Authentication** — Validates JWT tokens, API keys, or IAM signatures
+2. **Context Extraction** — Extracts tenant identifier from the credential
+3. **User Mapping** — Maps tenant to appropriate database user
+4. **Permission Assignment** — Determines what operations the tenant can perform
+
+!!! warning "Why Tenant Context Matters"
+    The tenant context flows through the entire request lifecycle. It determines which Redshift database user executes the query, which in turn controls what data the tenant can access through Row-Level Security.
+
+### Compute Layer
+
+The compute layer contains the business logic, organized into specialized handlers:
+
+| Handler | Purpose | Execution Model |
+|---------|---------|-----------------|
+| **Query Handler** | Interactive queries | Synchronous (max 5 min) |
+| **Bulk Handler** | Large data operations | Asynchronous (up to 24h) |
+| **Result Handler** | Data retrieval | Synchronous |
+| **Status Handler** | Job monitoring | Synchronous |
+
+**Why Two Execution Models?**
+
+Different use cases have different requirements:
 
 ```mermaid
 flowchart LR
-    REQ[Request] --> AUTH{Authorizer}
-    AUTH -->|Valid| POLICY[Allow Policy<br/>+ Tenant Context]
-    AUTH -->|Invalid| DENY[Deny]
-    POLICY --> LAMBDA[Lambda Handler]
+    subgraph Interactive["Interactive Workloads"]
+        DASH[Dashboards]
+        REPORT[Reports]
+        ADHOC[Ad-hoc Queries]
+    end
+    
+    subgraph Batch["Batch Workloads"]
+        ETL[ETL Jobs]
+        EXPORT[Data Exports]
+        IMPORT[Bulk Imports]
+    end
+    
+    Interactive --> QUERY[Query API<br/>Sync, <5 min]
+    Batch --> BULK[Bulk API<br/>Async, <24h]
 ```
 
-### API Handler Lambda
+The **Query API** is optimized for:
 
-Processes incoming requests synchronously:
+- Low latency responses
+- Interactive user experiences
+- Dashboard-style queries
+- Small to medium result sets
 
-- Query submission
-- Job status checks
-- Result retrieval
-- Bulk job management
+The **Bulk API** is optimized for:
 
-### Worker Lambda
+- Large data volumes
+- Long-running operations
+- ETL workloads
+- Data import/export
 
-Handles asynchronous operations triggered by DynamoDB Streams:
+### State Management
 
-- Long-running query execution
-- Large result export to S3
-- Bulk data processing
+DynamoDB provides persistent state management with two primary tables:
 
-### Lambda Layer
+**Jobs Table** — Tracks all query executions:
 
-Shared dependencies for all functions:
+- Job metadata (ID, tenant, status, timestamps)
+- Execution details (statement ID, duration)
+- Result references (S3 location, row counts)
+- Audit information (original SQL, parameters)
 
-| Package | Purpose |
-|---------|---------|
-| `aws-lambda-powertools` | Logging, tracing, metrics |
-| `pydantic` | Data validation |
-| `boto3` | AWS SDK |
+**Sessions Table** — Manages Redshift Data API sessions:
 
-## Data Flow
+- Active session tracking per tenant/user combination
+- TTL for automatic cleanup
+- Last-used timestamps for session reuse
+
+!!! tip "Why DynamoDB?"
+    DynamoDB's single-digit millisecond latency and automatic scaling make it ideal for job state management. The built-in TTL feature handles automatic cleanup of old job records.
+
+### Storage Layer
+
+Amazon S3 stores large query results that exceed inline response limits:
+
+- Results are partitioned by tenant for isolation
+- Lifecycle rules automatically clean up old results
+- Server-side encryption protects data at rest
+- Presigned URLs provide time-limited, secure access
+
+### Data Layer
+
+**Amazon Redshift** is the analytical engine:
+
+- Row-Level Security (RLS) enforces tenant data isolation
+- Role-Based Access Control (RBAC) manages permissions
+- Encryption at rest with KMS
+- Audit logging for compliance
+
+**Secrets Manager** handles credentials:
+
+- Automatic rotation of database credentials
+- No hardcoded passwords in code or configuration
+- IAM-based access control
+
+## Data Flow Patterns
 
 ### Synchronous Query Flow
 
-For small, fast queries:
+The Query API executes queries synchronously, returning results directly in the response:
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant API as API Gateway
-    participant Handler as API Handler
+    autonumber
+    participant C as Client
+    participant GW as API Gateway
+    participant A as Authorizer
+    participant H as Query Handler
+    participant D as DynamoDB
     participant RS as Redshift
+
+    C->>GW: POST /queries
+    GW->>A: Authorize
+    A-->>GW: Allow + Context
+    GW->>H: Invoke
     
-    Client->>API: POST /queries
-    API->>Handler: Invoke
-    Handler->>RS: Execute (Data API)
-    RS-->>Handler: Results
-    Handler-->>Client: JSON Response
+    H->>H: Validate SQL
+    H->>H: Inject LIMIT
+    H->>D: Create Job
+    H->>RS: Execute Statement
+    
+    loop Poll (max 5 min)
+        H->>RS: Describe Statement
+        RS-->>H: Status
+    end
+    
+    H->>RS: Get Results
+    RS-->>H: Data
+    H->>D: Update Job
+    H-->>C: Response with Data
 ```
 
-### Asynchronous Query Flow
+Key design decisions:
 
-For long-running analytical queries:
+1. **LIMIT Injection** — Automatically adds LIMIT clause to prevent memory issues
+2. **Polling with Backoff** — Exponential backoff prevents API throttling
+3. **Truncation Detection** — Returns partial data with warning if results exceed threshold
+4. **Job Audit Trail** — Every query is recorded even for sync execution
+
+### Asynchronous Bulk Flow
+
+The Bulk API uses a job-based pattern for long-running operations:
 
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant API as API Gateway
-    participant Handler as API Handler
-    participant DDB as DynamoDB
-    participant Worker
+    autonumber
+    participant C as Client
+    participant H as Bulk Handler
+    participant D as DynamoDB
+    participant S as S3
     participant RS as Redshift
-    participant S3
+
+    C->>H: POST /bulk/jobs
+    H->>D: Create Job (Open)
+    H-->>C: Job ID + Upload URL
     
-    Client->>API: POST /queries {async: true}
-    API->>Handler: Invoke
-    Handler->>DDB: Create Job (QUEUED)
-    Handler-->>Client: {job_id, status: QUEUED}
+    C->>S: Upload Data
+    C->>H: PATCH /bulk/jobs/{id}
+    H->>D: Update (UploadComplete)
     
-    DDB--)Worker: Stream Trigger
-    Worker->>RS: Execute Statement
-    Worker->>DDB: Update (RUNNING)
+    Note over H,RS: Background Processing
     
-    loop Poll Status
-        Client->>API: GET /jobs/{id}
-        API->>Handler: Get Status
-        Handler->>DDB: Query
-        Handler-->>Client: {status}
-    end
+    H->>RS: Execute Query/COPY
+    RS-->>H: Results
+    H->>S: Write Results
+    H->>D: Update (Complete)
     
-    RS-->>Worker: Results
-    Worker->>S3: Export Large Results
-    Worker->>DDB: Update (COMPLETED)
-    
-    Client->>API: GET /jobs/{id}/results
-    Handler->>S3: Generate Presigned URL
-    Handler-->>Client: {download_url}
+    C->>H: GET /bulk/jobs/{id}
+    H-->>C: Status + Download URL
 ```
 
-## State Management
+Key design decisions:
 
-### Job Lifecycle
+1. **State Machine** — Clear job states (Open → UploadComplete → InProgress → Complete)
+2. **Decoupled Upload** — Presigned URLs allow direct S3 upload without Lambda
+3. **Background Processing** — Jobs continue processing after client disconnects
+4. **Result Delivery** — Large results stored in S3 with secure presigned URLs
 
-```mermaid
-stateDiagram-v2
-    [*] --> QUEUED: Submit Query
-    QUEUED --> RUNNING: Worker Picks Up
-    RUNNING --> COMPLETED: Success
-    RUNNING --> FAILED: Error
-    QUEUED --> CANCELLED: User Cancel
-    RUNNING --> CANCELLED: User Cancel
-    COMPLETED --> [*]
-    FAILED --> [*]
-    CANCELLED --> [*]
-```
+## Scalability Considerations
 
-### DynamoDB Tables
-
-**Jobs Table:**
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `job_id` (PK) | String | Unique job identifier |
-| `tenant_id` (GSI) | String | Tenant identifier |
-| `status` | String | Job status |
-| `sql` | String | Query SQL |
-| `created_at` | String | Creation timestamp |
-| `ttl` | Number | Expiration time |
-
-**Sessions Table:**
-
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `session_id` (PK) | String | Redshift session ID |
-| `tenant_id` (GSI) | String | Tenant identifier |
-| `created_at` | String | Session creation time |
-| `last_used` | String | Last activity time |
-| `ttl` | Number | Expiration time |
-
-## Design Decisions
-
-### Why Redshift Data API?
-
-| Feature | Data API | JDBC/ODBC |
-|---------|----------|-----------|
-| Connection Management | AWS-managed | Self-managed |
-| Scaling | Automatic | Connection pools |
-| Cold Start | None | Connection overhead |
-| Lambda Compatible | Native | VPC required |
-
-### Why DynamoDB for State?
-
-- **Serverless**: No connection limits
-- **Low Latency**: Single-digit millisecond reads
-- **Streams**: Trigger async processing
-- **TTL**: Automatic data cleanup
-
-### Why Lambda Layer Architecture?
-
-```mermaid
-flowchart TB
-    subgraph Traditional["Traditional (50MB × 3)"]
-        F1[Function 1<br/>Code + Deps]
-        F2[Function 2<br/>Code + Deps]
-        F3[Function 3<br/>Code + Deps]
-    end
-    
-    subgraph Layer["Layer Architecture (50MB + 3 × ~10KB)"]
-        L[Shared Layer<br/>Dependencies]
-        L1[Function 1<br/>Code Only]
-        L2[Function 2<br/>Code Only]
-        L3[Function 3<br/>Code Only]
-        L --> L1
-        L --> L2
-        L --> L3
-    end
-```
-
-Benefits:
-
-- **Reduced Deployment Size**: Functions are KB instead of MB
-- **Faster Updates**: Deploy code without rebuilding dependencies
-- **Consistent Versions**: All functions use the same dependency versions
-
-## Scalability
-
-### Request Scaling
+### Horizontal Scaling
 
 ```mermaid
 flowchart LR
-    subgraph Load["Incoming Load"]
+    subgraph Requests["Concurrent Requests"]
         R1[Request 1]
         R2[Request 2]
         R3[Request N]
     end
     
-    subgraph Gateway["API Gateway"]
-        THROTTLE[Throttling<br/>10,000 RPS]
-    end
-    
-    subgraph Lambda["Lambda"]
+    subgraph Lambda["Lambda Auto-Scaling"]
         L1[Instance 1]
         L2[Instance 2]
         L3[Instance N]
     end
     
-    Load --> THROTTLE
-    THROTTLE --> Lambda
+    subgraph Redshift["Redshift Concurrency"]
+        RS[(Redshift<br/>WLM Queues)]
+    end
+    
+    Requests --> Lambda
+    Lambda --> RS
 ```
 
-### Concurrency Limits
+- **Lambda** — Automatically scales to thousands of concurrent executions
+- **DynamoDB** — On-demand capacity scales with traffic
+- **S3** — Virtually unlimited storage capacity
+- **Redshift** — WLM queues manage concurrent queries
 
-| Component | Limit | Configurable |
-|-----------|-------|--------------|
-| API Gateway | 10,000 RPS | Yes (quota) |
-| Lambda Concurrent | 1,000 | Yes (reserved) |
-| DynamoDB | On-demand | Automatic |
-| Redshift Data API | 200 statements | Account quota |
+### Performance Optimizations
+
+1. **Session Reuse** — Redshift Data API sessions are cached and reused
+2. **Connection Pooling** — Sessions are shared across requests for the same tenant
+3. **Lambda Warm Start** — Provisioned concurrency for latency-sensitive workloads
+4. **Smart Caching** — Session metadata cached in DynamoDB with TTL
+
+## Deployment Architecture
+
+Redshift Spectra supports multiple deployment topologies:
+
+### Single-Region Deployment
+
+Suitable for most use cases:
+
+```mermaid
+flowchart TB
+    subgraph Region["AWS Region"]
+        APIGW[API Gateway]
+        LAMBDA[Lambda]
+        DDB[(DynamoDB)]
+        S3[(S3)]
+        RS[(Redshift)]
+    end
+    
+    CLIENTS[Clients] --> APIGW
+```
+
+### Multi-Region Deployment
+
+For global enterprises requiring low-latency access:
+
+```mermaid
+flowchart TB
+    subgraph Primary["Primary Region"]
+        APIGW1[API Gateway]
+        LAMBDA1[Lambda]
+        RS1[(Redshift)]
+        DDB1[(DynamoDB)]
+    end
+    
+    subgraph Secondary["Secondary Region"]
+        APIGW2[API Gateway]
+        LAMBDA2[Lambda]
+        DDB2[(DynamoDB)]
+    end
+    
+    R53[Route 53] --> APIGW1
+    R53 --> APIGW2
+    DDB1 <-.->|Global Tables| DDB2
+    RS1 -.->|Data Sharing| Secondary
+```
 
 ## Next Steps
 
-- [Multi-Tenancy](multi-tenancy.md) - Tenant isolation design
-- [Data Delivery](data-delivery.md) - Result delivery patterns
-- [Performance](../performance/overview.md) - Optimization techniques
+Now that you understand the architecture:
+
+- [Learn about multi-tenancy](multi-tenancy.md) — Deep dive into tenant isolation
+- [Explore data delivery](data-delivery.md) — Understand result handling strategies
+- [Review security model](../security/overview.md) — Comprehensive security overview

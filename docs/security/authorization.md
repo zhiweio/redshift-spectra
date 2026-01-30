@@ -1,307 +1,312 @@
 # Authorization
 
-Redshift Spectra enforces authorization at the **database layer** using Redshift's native security features.
+After authentication establishes identity, authorization determines what actions a user can perform and what data they can access. Redshift Spectra implements authorization at two levels: the **API layer** and the **database layer**.
 
-## Authorization Model
+## Authorization Architecture
 
 ```mermaid
 flowchart TB
-    subgraph App["Application Layer"]
-        TENANT[Tenant Context]
-        PERM[Permission Check]
+    subgraph APILayer["API Layer Authorization"]
+        direction LR
+        PERM[Permission Check] --> |"query:execute"| ALLOW1[Allow]
+        PERM --> |"bulk:create"| ALLOW2[Allow]
+        PERM --> |"missing"| DENY[Deny 403]
     end
     
-    subgraph DB["Database Layer"]
-        USER[Redshift User]
-        GROUP[Redshift Group]
-        RLS[Row-Level Security]
-        CLS[Column-Level Security]
+    subgraph DBLayer["Database Layer Authorization"]
+        direction LR
+        USER[db_user] --> RBAC[Role-Based Access]
+        RBAC --> RLS[Row-Level Security]
+        RLS --> DATA[Filtered Data]
     end
     
-    TENANT --> USER
-    PERM --> GROUP
-    USER --> RLS
-    GROUP --> CLS
+    REQUEST[Request + Tenant Context] --> APILayer
+    APILayer --> |"Allowed"| DBLayer
 ```
 
-## Tenant-to-User Mapping
+## API Layer Authorization
 
-Each tenant maps to a dedicated Redshift database user:
+The API layer checks whether the authenticated user has permission to perform the requested operation.
 
-| Tenant ID | Database User | Database Group |
-|-----------|---------------|----------------|
-| `acme-corp` | `tenant_acme_corp` | `tenant_group_acme_corp` |
-| `globex` | `tenant_globex` | `tenant_group_globex` |
-| `initech` | `tenant_initech` | `tenant_group_initech` |
+### Permission Model
 
-### User Creation
+Permissions are strings that describe allowed operations:
 
-```sql
--- Create tenant user
-CREATE USER tenant_acme_corp PASSWORD DISABLE;
+| Permission | Description | Scope |
+|------------|-------------|-------|
+| `query:execute` | Submit synchronous queries | Query API |
+| `bulk:create` | Create bulk export/import jobs | Bulk API |
+| `bulk:read` | Read job status and results | Bulk API |
+| `bulk:cancel` | Cancel running jobs | Bulk API |
+| `admin:*` | All administrative operations | Admin API |
+| `*` | Wildcard (all permissions) | All APIs |
 
--- Create tenant group
-CREATE GROUP tenant_group_acme_corp;
+### Permission Sources
 
--- Add user to group
-ALTER GROUP tenant_group_acme_corp ADD USER tenant_acme_corp;
-
--- Grant schema access
-GRANT USAGE ON SCHEMA analytics TO GROUP tenant_group_acme_corp;
-
--- Grant table access
-GRANT SELECT ON ALL TABLES IN SCHEMA analytics TO GROUP tenant_group_acme_corp;
-```
-
-## Row-Level Security (RLS)
-
-RLS automatically filters data based on the executing user.
-
-### Enable RLS
-
-```sql
--- Enable RLS on the table
-ALTER TABLE sales ROW LEVEL SECURITY ON;
-
--- Create policy
-CREATE RLS POLICY tenant_isolation
-ON sales
-USING (tenant_id = current_user);
-
--- Attach policy to group
-ATTACH RLS POLICY tenant_isolation
-ON sales
-TO GROUP tenant_group_acme_corp;
-```
-
-### How It Works
+Permissions can come from multiple sources:
 
 ```mermaid
-sequenceDiagram
-    participant C as Client (acme-corp)
-    participant S as Spectra
-    participant R as Redshift
-
-    C->>S: SELECT * FROM sales
-    S->>R: SET SESSION AUTHORIZATION tenant_acme_corp
-    S->>R: SELECT * FROM sales
-    Note over R: RLS applies: WHERE tenant_id = 'tenant_acme_corp'
-    R-->>C: Only acme-corp data
-```
-
-### Policy Examples
-
-**Tenant Isolation:**
-
-```sql
-CREATE RLS POLICY tenant_data
-ON orders
-USING (tenant_id = current_user);
-```
-
-**Date-Based Access:**
-
-```sql
-CREATE RLS POLICY recent_data_only
-ON transactions
-USING (
-  tenant_id = current_user
-  AND transaction_date >= CURRENT_DATE - INTERVAL '90 days'
-);
-```
-
-**Region-Based Access:**
-
-```sql
-CREATE RLS POLICY regional_access
-ON customers
-USING (
-  tenant_id = current_user
-  AND region = ANY(
-    SELECT allowed_region
-    FROM tenant_permissions
-    WHERE tenant = current_user
-  )
-);
-```
-
-## Column-Level Security (CLS)
-
-Restrict access to sensitive columns.
-
-### Implementation
-
-```sql
--- Revoke access to sensitive columns
-REVOKE SELECT (ssn, credit_card_number, salary)
-ON employees
-FROM GROUP tenant_group_acme_corp;
-
--- Grant access to non-sensitive columns
-GRANT SELECT (id, name, email, department, hire_date)
-ON employees
-TO GROUP tenant_group_acme_corp;
-```
-
-### Dynamic Column Masking
-
-For partial access, create masking views:
-
-```sql
-CREATE VIEW employees_masked AS
-SELECT
-  id,
-  name,
-  email,
-  department,
-  CASE
-    WHEN current_user = 'admin'
-    THEN salary
-    ELSE NULL
-  END AS salary,
-  CONCAT('XXX-XX-', RIGHT(ssn, 4)) AS ssn_masked
-FROM employees;
-
-GRANT SELECT ON employees_masked TO GROUP tenant_group_acme_corp;
-```
-
-## Permission Model
-
-### Application-Level Permissions
-
-Spectra checks permissions before executing queries:
-
-```python
-@dataclass
-class TenantContext:
-    tenant_id: str
-    db_user: str
-    db_group: str | None
-    permissions: list[str]
+flowchart TB
+    subgraph Sources["Permission Sources"]
+        JWT[JWT Claims<br/>permissions: [...]]
+        LOOKUP[API Key Lookup<br/>tenant_permissions table]
+        DEFAULT[Default Permissions<br/>query:execute, bulk:read]
+    end
     
-    def has_permission(self, permission: str) -> bool:
-        return permission in self.permissions
+    Sources --> MERGE[Merge Permissions]
+    MERGE --> CHECK[Permission Check]
 ```
 
-### Available Permissions
+### Permission Hierarchy
 
-| Permission | Description |
-|------------|-------------|
-| `query` | Execute SELECT queries |
-| `export` | Export results to S3 |
-| `bulk_query` | Execute bulk query operations |
-| `bulk_insert` | Execute bulk insert operations |
-| `bulk_update` | Execute bulk update operations |
-| `bulk_delete` | Execute bulk delete operations |
+Permissions support hierarchical matching:
+
+- `bulk:*` matches `bulk:create`, `bulk:read`, `bulk:cancel`
+- `*` matches all permissions
+- Exact match is required otherwise
+
+```mermaid
+flowchart LR
+    REQ[Required: bulk:create] --> CHECK{Permission Check}
+    
+    CHECK --> |"Has: bulk:create"| EXACT[Exact Match ✓]
+    CHECK --> |"Has: bulk:*"| WILD[Wildcard Match ✓]
+    CHECK --> |"Has: *"| ALL[Universal Match ✓]
+    CHECK --> |"Has: query:execute"| DENY[No Match ✗]
+```
 
 ### Permission Enforcement
 
-```python
-from spectra.middleware.tenant import require_permission
+Permission checks happen after authentication but before business logic:
 
-@require_permission("export")
-def export_handler(event, context):
-    # Only executes if tenant has "export" permission
-    ...
-```
-
-## Query Validation
-
-### SQL Restrictions
-
-Spectra validates queries before execution:
-
-```python
-def validate_query(sql: str) -> None:
-    """Validate SQL query for security."""
-    upper_sql = sql.upper().strip()
+```mermaid
+sequenceDiagram
+    participant H as Handler
+    participant D as Decorator
+    participant L as Logic
     
-    # Only SELECT allowed
-    if not upper_sql.startswith("SELECT"):
-        raise ValueError("Only SELECT statements are allowed")
+    H->>D: @require_permission("bulk:create")
+    D->>D: Check tenant_context.permissions
     
-    # Block dangerous statements
-    forbidden = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE"]
-    for keyword in forbidden:
-        if keyword in upper_sql:
-            raise ValueError(f"{keyword} statements are not allowed")
+    alt Has Permission
+        D->>L: Execute Business Logic
+        L-->>H: Result
+    else Missing Permission
+        D-->>H: 403 Forbidden
+    end
 ```
 
-### Object Access Validation
+## Database Layer Authorization
 
-```sql
--- View accessible objects for a user
-SELECT
-  schemaname,
-  tablename,
-  has_table_privilege(current_user, schemaname || '.' || tablename, 'SELECT') as can_select
-FROM pg_tables
-WHERE schemaname = 'analytics';
+The database layer controls what data the user can access. This is the **critical security boundary** that guarantees tenant isolation.
+
+### Role-Based Access Control (RBAC)
+
+Each database user belongs to groups that determine their base permissions:
+
+```mermaid
+flowchart TB
+    subgraph Users["Database Users"]
+        U1[db_user_acme]
+        U2[db_user_globex]
+        U3[db_user_initech]
+    end
+    
+    subgraph Groups["Database Groups"]
+        G1[tenant_readers<br/>SELECT on views]
+        G2[tenant_writers<br/>SELECT, INSERT on views]
+        G3[tenant_admins<br/>Full access to tenant objects]
+    end
+    
+    subgraph Objects["Database Objects"]
+        V1[sales_view]
+        V2[customers_view]
+        V3[analytics_view]
+    end
+    
+    U1 --> G1
+    U2 --> G2
+    U3 --> G1
+    
+    G1 --> V1
+    G1 --> V2
+    G2 --> V1
+    G2 --> V2
+    G2 --> V3
 ```
 
-## Audit Trail
+### Row-Level Security (RLS)
 
-All database access is logged:
+RLS policies automatically filter data based on the executing user:
 
-```sql
--- Enable audit logging
-ALTER USER tenant_acme_corp SET log_statement = 'all';
+```mermaid
+flowchart TB
+    subgraph Query["User Query"]
+        Q1["SELECT * FROM orders"]
+    end
+    
+    subgraph RLS["RLS Policy"]
+        POLICY["WHERE tenant_id = CURRENT_USER_ID()"]
+    end
+    
+    subgraph Execution["Actual Execution"]
+        ACTUAL["SELECT * FROM orders<br/>WHERE tenant_id = 'acme-corp'"]
+    end
+    
+    subgraph Result["Result Set"]
+        DATA["Only ACME Corp orders"]
+    end
+    
+    Query --> RLS
+    RLS --> Execution
+    Execution --> Result
+```
 
--- Query audit logs
-SELECT
-  username,
-  query,
-  starttime,
-  endtime
-FROM stl_query
-WHERE username LIKE 'tenant_%'
-ORDER BY starttime DESC;
+This means:
+
+- The same SQL query works for all tenants
+- No application code changes needed
+- Impossible to accidentally access other tenant's data
+
+### Setting Up RLS in Redshift
+
+Row-Level Security requires creating policies in Redshift:
+
+```mermaid
+flowchart TB
+    subgraph Setup["RLS Setup Steps"]
+        direction TB
+        S1["1. Enable RLS on table"]
+        S2["2. Create RLS policy"]
+        S3["3. Attach policy to group"]
+        S4["4. Grant group to user"]
+    end
+    
+    S1 --> S2 --> S3 --> S4
+```
+
+**Key concepts:**
+
+1. **Tables must have a tenant identifier column** — Usually `tenant_id`
+2. **Policies match column to user context** — `tenant_id = CURRENT_USER`
+3. **Policies apply automatically** — No query modification needed
+4. **Superusers bypass RLS** — Use dedicated users, not admin accounts
+
+## Column-Level Security
+
+Beyond row filtering, Redshift supports column-level access control:
+
+```mermaid
+flowchart LR
+    subgraph Columns["Table Columns"]
+        C1[id]
+        C2[name]
+        C3[email]
+        C4[ssn]
+        C5[salary]
+    end
+    
+    subgraph Access["Access Levels"]
+        PUBLIC[All Users]
+        LIMITED[Analysts]
+        RESTRICTED[Admins Only]
+    end
+    
+    C1 --> PUBLIC
+    C2 --> PUBLIC
+    C3 --> LIMITED
+    C4 --> RESTRICTED
+    C5 --> RESTRICTED
+```
+
+This ensures sensitive columns like PII are only visible to authorized users.
+
+## Authorization Decision Flow
+
+The complete authorization flow:
+
+```mermaid
+flowchart TB
+    REQUEST[Incoming Request] --> AUTHN{Authenticated?}
+    
+    AUTHN -->|No| DENY401[401 Unauthorized]
+    AUTHN -->|Yes| PERM{Has Permission?}
+    
+    PERM -->|No| DENY403[403 Forbidden]
+    PERM -->|Yes| EXECUTE[Execute Query]
+    
+    EXECUTE --> RBAC{RBAC Check}
+    
+    RBAC -->|Denied| ERROR[Query Error]
+    RBAC -->|Allowed| RLS[Apply RLS]
+    
+    RLS --> RESULT[Filtered Results]
+```
+
+## Tenant Isolation Verification
+
+To verify tenant isolation is working correctly:
+
+```mermaid
+flowchart TB
+    subgraph Test["Isolation Test"]
+        T1[Connect as tenant_a user]
+        T2[Query shared table]
+        T3[Verify only tenant_a data]
+        
+        T1 --> T2 --> T3
+    end
+    
+    subgraph Expected["Expected Behavior"]
+        E1[Query: SELECT COUNT(*) FROM orders]
+        E2[Result: 1000 rows<br/>All belong to tenant_a]
+    end
+    
+    Test --> Expected
 ```
 
 ## Best Practices
 
 !!! tip "Principle of Least Privilege"
+    Grant the minimum permissions required:
     
-    Grant only the minimum permissions required. Start restrictive and add as needed.
+    - Start with `query:execute` only
+    - Add permissions as needed
+    - Use specific permissions over wildcards
 
-!!! tip "Test RLS Policies"
+!!! tip "Use Database Groups"
+    Don't grant permissions directly to users:
     
-    Always test RLS policies with multiple tenant users before production deployment.
+    - Create logical groups (readers, writers, admins)
+    - Grant permissions to groups
+    - Add users to groups
 
-!!! warning "Don't Rely on Application-Only Security"
+!!! warning "Test Tenant Isolation"
+    Regularly verify that RLS is working:
     
-    Application-level checks can be bypassed. Always implement database-level security.
+    - Create test tenants with known data
+    - Verify cross-tenant queries return no data
+    - Include in CI/CD pipeline
 
-!!! danger "Avoid Dynamic SQL"
+!!! danger "Never Use Superuser Connections"
+    Superusers bypass all RLS policies:
     
-    Never construct SQL from user input. Use parameterized queries to prevent injection.
+    - Create dedicated application users
+    - Use Secrets Manager for credential rotation
+    - Monitor for superuser access
 
-## Troubleshooting
+## Error Responses
 
-### Check User Permissions
+| Error | HTTP Status | Description |
+|-------|-------------|-------------|
+| Missing permission | 403 | User lacks required API permission |
+| Invalid operation | 403 | Operation not allowed for this tenant |
+| RLS violation | 500 | Query fails due to RLS restriction |
 
-```sql
--- List user's group memberships
-SELECT
-  usename,
-  groname
-FROM pg_user u
-JOIN pg_group g ON u.usesysid = ANY(g.grolist)
-WHERE usename = 'tenant_acme_corp';
+## Audit Trail
 
--- Check table permissions
-SELECT
-  has_table_privilege('tenant_acme_corp', 'analytics.sales', 'SELECT') as can_select;
-```
+All authorization decisions are logged:
 
-### Verify RLS Policies
-
-```sql
--- List RLS policies
-SELECT
-  polname,
-  polrelid::regclass as table_name,
-  polcmd,
-  polqual
-FROM pg_policy;
-```
+- **API permission checks** — Logged with outcome and required permission
+- **Database access** — Logged in Redshift audit logs
+- **RLS applications** — Visible in query explain plans

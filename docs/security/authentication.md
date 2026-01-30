@@ -1,244 +1,284 @@
 # Authentication
 
-Redshift Spectra supports multiple authentication modes to integrate with your existing identity infrastructure.
+Authentication is the first line of defense in Redshift Spectra. This document explains the supported authentication methods and how they establish tenant identity.
 
 ## Authentication Flow
+
+Every request to Redshift Spectra must be authenticated. The authentication process establishes two critical pieces of information:
+
+1. **Identity** — Who is making the request
+2. **Tenant Context** — Which tenant's data can be accessed
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client
     participant AG as API Gateway
-    participant AUTH as Lambda Authorizer
-    participant SM as Secrets Manager
+    participant LA as Lambda Authorizer
     participant H as Handler
 
     C->>AG: Request + Credentials
-    AG->>AUTH: Invoke Authorizer
+    AG->>LA: Invoke Authorizer
     
-    alt API Key
-        AUTH->>SM: Validate API Key
-        SM-->>AUTH: Key Metadata
-    else JWT
-        AUTH->>AUTH: Validate Signature
-        AUTH->>AUTH: Check Claims
-    else IAM
-        AG->>AG: SigV4 Validation
+    LA->>LA: Validate Credentials
+    LA->>LA: Extract Tenant ID
+    LA->>LA: Map to DB User
+    LA->>LA: Determine Permissions
+    
+    alt Valid Credentials
+        LA-->>AG: Allow Policy + Context
+        AG->>H: Forward Request + Context
+        H-->>C: Response
+    else Invalid Credentials
+        LA-->>AG: Deny Policy
+        AG-->>C: 401 Unauthorized
     end
-    
-    AUTH-->>AG: IAM Policy + Context
-    AG->>H: Forward Request
 ```
 
-## Supported Modes
+## Supported Authentication Methods
+
+Redshift Spectra supports three authentication methods, each suited to different use cases:
+
+### JWT Token Authentication
+
+Best for: **User-facing applications** where users authenticate through an Identity Provider.
+
+```mermaid
+flowchart LR
+    subgraph IdP["Identity Provider"]
+        OKTA[Okta]
+        AUTH0[Auth0]
+        COGNITO[Amazon Cognito]
+        AZURE[Azure AD]
+    end
+    
+    subgraph Flow["Authentication Flow"]
+        USER[User] --> IdP
+        IdP --> JWT[JWT Token]
+        JWT --> SPECTRA[Redshift Spectra]
+    end
+    
+    subgraph Claims["Token Claims"]
+        TID[tenant_id]
+        DBU[db_user]
+        PERMS[permissions]
+    end
+    
+    SPECTRA --> Claims
+```
+
+The authorizer extracts tenant information from JWT claims:
+
+| Claim | Required | Description |
+|-------|----------|-------------|
+| `sub` | Yes | Subject identifier (user ID) |
+| `tenant_id` | Yes | Tenant identifier |
+| `db_user` | Yes | Database user for query execution |
+| `db_group` | No | Database group for permissions |
+| `permissions` | No | Array of allowed operations |
+
+**How to configure:**
+
+1. Configure your Identity Provider to include `tenant_id` and `db_user` claims
+2. Set `SPECTRA_JWT_ISSUER` and `SPECTRA_JWT_AUDIENCE` environment variables
+3. Send requests with `Authorization: Bearer <token>` header
 
 ### API Key Authentication
 
-Best for machine-to-machine communication.
-
-**Configuration:**
-
-```bash
-SPECTRA_AUTH_MODE=api_key
-```
-
-**Usage:**
-
-```bash
-curl -X POST "$API_URL/queries" \
-  -H "Authorization: Bearer spectra_tenant123_abc123xyz" \
-  -H "X-Tenant-ID: tenant-123"
-```
-
-**Key Format:**
-
-```
-spectra_{tenant_id}_{secret_hash}
-```
-
-**Benefits:**
-
-- Simple integration
-- No token refresh needed
-- Easy to rotate
-
-**Considerations:**
-
-- Must be kept secret
-- Harder to audit per-user access
-- Consider expiration policies
-
-### JWT Authentication
-
-Best for user-facing applications with identity providers.
-
-**Configuration:**
-
-```bash
-SPECTRA_AUTH_MODE=jwt
-SPECTRA_JWT_SECRET_ARN=arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt/secret
-SPECTRA_JWT_ISSUER=https://auth.example.com
-SPECTRA_JWT_AUDIENCE=spectra-api
-```
-
-**Usage:**
-
-```bash
-curl -X POST "$API_URL/queries" \
-  -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..."
-```
-
-**Expected Claims:**
-
-```json
-{
-  "sub": "user-123",
-  "iss": "https://auth.example.com",
-  "aud": "spectra-api",
-  "exp": 1738234800,
-  "tenant_id": "tenant-123",
-  "db_user": "tenant_123",
-  "permissions": ["query", "export"]
-}
-```
-
-**Supported Algorithms:**
-
-- RS256, RS384, RS512 (RSA)
-- ES256, ES384, ES512 (ECDSA)
-- HS256, HS384, HS512 (HMAC)
-
-### IAM Authentication
-
-Best for AWS service-to-service communication.
-
-**Configuration:**
-
-```bash
-SPECTRA_AUTH_MODE=iam
-```
-
-**Usage:**
-
-```python
-import boto3
-from requests_aws4auth import AWS4Auth
-
-session = boto3.Session()
-credentials = session.get_credentials()
-auth = AWS4Auth(
-    credentials.access_key,
-    credentials.secret_key,
-    'us-east-1',
-    'execute-api',
-    session_token=credentials.token
-)
-
-response = requests.post(
-    f"{API_URL}/queries",
-    auth=auth,
-    headers={"X-Tenant-ID": "tenant-123"},
-    json={"sql": "SELECT 1"}
-)
-```
-
-## Tenant Context Extraction
-
-The authorizer extracts tenant context from multiple sources:
+Best for: **Machine-to-machine** communication and **partner integrations**.
 
 ```mermaid
 flowchart TB
-    REQ[Request] --> H{Headers?}
-    H -->|X-Tenant-ID| HEADER[Header Tenant]
-    H -->|No| T{Token?}
+    subgraph Keys["API Key Structure"]
+        direction LR
+        PREFIX["spk_"] --> TENANT["tenant-id"] --> SECRET["_secret-key"]
+    end
     
-    T -->|JWT Claims| CLAIMS[Token Tenant]
-    T -->|API Key| PARSE[Parse Key]
+    subgraph Storage["Key Management"]
+        SM[Secrets Manager]
+        DDB[DynamoDB]
+    end
     
-    HEADER --> CTX[Tenant Context]
-    CLAIMS --> CTX
-    PARSE --> CTX
+    subgraph Lookup["Validation Flow"]
+        HASH[Hash Key]
+        LOOKUP[Lookup Tenant]
+        VALIDATE[Validate Permissions]
+    end
     
-    CTX --> DBUSER[Map to db_user]
+    Keys --> LOOKUP
+    LOOKUP --> Storage
+    Storage --> VALIDATE
 ```
 
-### Priority Order
+API keys encode tenant information directly in their structure:
 
-1. `X-Tenant-ID` header (highest priority)
-2. JWT claim `tenant_id` or `custom:tenant_id`
-3. Derived from API key ID
+- Format: `spk_{tenant_id}_{secret}`
+- Example: `spk_acme-corp_a1b2c3d4e5f6`
 
-## Lambda Authorizer
+The authorizer extracts `tenant_id` from the key prefix and validates the secret against stored hashes.
 
-The authorizer returns an IAM policy and context:
+**How to configure:**
 
-```json
-{
-  "principalId": "tenant-123",
-  "policyDocument": {
-    "Version": "2012-10-17",
-    "Statement": [{
-      "Action": "execute-api:Invoke",
-      "Effect": "Allow",
-      "Resource": "arn:aws:execute-api:us-east-1:*:*/*/queries/*"
-    }]
-  },
-  "context": {
-    "tenant_id": "tenant-123",
-    "db_user": "tenant_123",
-    "db_group": "tenant_group_123",
-    "permissions": "query,export"
-  }
-}
+1. Generate API keys for each tenant
+2. Store hashed keys in Secrets Manager or DynamoDB
+3. Send requests with `Authorization: Bearer spk_...` header
+
+### Request Header Authentication
+
+Best for: **Internal microservices** where identity is established upstream.
+
+```mermaid
+flowchart LR
+    subgraph Internal["Internal Network"]
+        SVC1[Service A] --> GW[API Gateway]
+        SVC2[Service B] --> GW
+    end
+    
+    subgraph Headers["Required Headers"]
+        TID["X-Tenant-ID"]
+        DBU["X-DB-User"]
+        DBG["X-DB-Group"]
+    end
+    
+    GW --> SPECTRA[Redshift Spectra]
+    SPECTRA --> Headers
 ```
 
-## Token Refresh
+Required headers:
 
-For JWT authentication, implement token refresh in your client:
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-Tenant-ID` | Yes | Tenant identifier |
+| `X-DB-User` | Yes | Database user for query execution |
+| `X-DB-Group` | No | Database group for permissions |
 
-```python
-class SpectraClient:
-    def __init__(self, auth_url, client_id, client_secret):
-        self.auth_url = auth_url
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.token = None
-        self.token_expiry = None
+!!! warning "Security Note"
+    Header-based authentication should only be used for trusted internal services behind a VPC. Never expose this method to external clients.
+
+## Authentication Priority
+
+When multiple authentication methods are present, the authorizer applies this priority:
+
+```mermaid
+flowchart TB
+    REQUEST[Incoming Request] --> CHECK1{JWT Token?}
     
-    def get_token(self):
-        if self.token and datetime.now() < self.token_expiry:
-            return self.token
-        
-        response = requests.post(
-            f"{self.auth_url}/oauth/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self.client_id,
-                "client_secret": self.client_secret
-            }
-        )
-        
-        data = response.json()
-        self.token = data["access_token"]
-        self.token_expiry = datetime.now() + timedelta(seconds=data["expires_in"] - 60)
-        
-        return self.token
+    CHECK1 -->|Yes| JWT[Use JWT Claims]
+    CHECK1 -->|No| CHECK2{API Key?}
+    
+    CHECK2 -->|Yes| APIKEY[Parse API Key]
+    CHECK2 -->|No| CHECK3{Headers?}
+    
+    CHECK3 -->|Yes| HEADERS[Use Headers]
+    CHECK3 -->|No| DENY[401 Unauthorized]
+    
+    JWT --> CONTEXT[Tenant Context]
+    APIKEY --> CONTEXT
+    HEADERS --> CONTEXT
 ```
 
-## Security Best Practices
+## Tenant Context
 
-!!! tip "Use Short-Lived Tokens"
-    
-    For JWT, use short expiration times (15-60 minutes) with refresh tokens.
+Successful authentication produces a **Tenant Context** that flows through the entire request:
 
-!!! tip "Rotate API Keys"
+```mermaid
+classDiagram
+    class TenantContext {
+        +string tenant_id
+        +string db_user
+        +string db_group
+        +list~string~ permissions
+        +string request_id
+        +datetime authenticated_at
+    }
     
-    Implement regular API key rotation. Use Secrets Manager for storage.
+    class Handler {
+        +process(context: TenantContext)
+    }
+    
+    class RedshiftService {
+        +execute(sql, db_user)
+    }
+    
+    class AuditLog {
+        +log(tenant_id, action, details)
+    }
+    
+    TenantContext --> Handler
+    Handler --> RedshiftService
+    Handler --> AuditLog
+```
 
-!!! warning "Never Log Credentials"
-    
-    Ensure logging excludes Authorization headers and tokens.
+The tenant context ensures:
 
-!!! danger "Validate All Inputs"
+- Queries execute as the tenant's database user
+- All operations are logged with tenant identifier
+- Permissions are checked before operations
+
+## Token Validation
+
+For JWT tokens, validation includes:
+
+1. **Signature verification** — Using issuer's public keys
+2. **Expiration check** — Token must not be expired
+3. **Audience validation** — Token must be issued for this service
+4. **Issuer validation** — Token must come from trusted issuer
+5. **Required claims** — `tenant_id` and `db_user` must be present
+
+```mermaid
+flowchart TB
+    TOKEN[JWT Token] --> SIG{Signature Valid?}
     
-    Never trust client-provided tenant IDs without validation against credentials.
+    SIG -->|No| DENY[Deny]
+    SIG -->|Yes| EXP{Not Expired?}
+    
+    EXP -->|No| DENY
+    EXP -->|Yes| AUD{Audience Valid?}
+    
+    AUD -->|No| DENY
+    AUD -->|Yes| ISS{Issuer Valid?}
+    
+    ISS -->|No| DENY
+    ISS -->|Yes| CLAIMS{Required Claims?}
+    
+    CLAIMS -->|No| DENY
+    CLAIMS -->|Yes| ALLOW[Allow]
+```
+
+## API Key Security
+
+API keys are protected through:
+
+- **Hashing** — Keys are stored as bcrypt hashes
+- **Rotation** — Keys can be rotated without downtime
+- **Scoping** — Keys can be limited to specific operations
+- **Audit** — All key usage is logged
+- **Revocation** — Keys can be immediately revoked
+
+## Error Responses
+
+| Error | HTTP Status | Description |
+|-------|-------------|-------------|
+| Missing credentials | 401 | No authentication method detected |
+| Invalid token | 401 | JWT signature or format invalid |
+| Expired token | 401 | JWT has expired |
+| Invalid API key | 401 | API key not found or invalid |
+| Missing tenant context | 401 | Required tenant claims not present |
+
+## Best Practices
+
+!!! tip "Use JWT for User Applications"
+    JWT tokens from your Identity Provider provide the best user experience and centralized identity management.
+
+!!! tip "Use API Keys for Integrations"
+    API keys are simpler for machine-to-machine communication and can be easily rotated.
+
+!!! warning "Protect API Keys"
+    Treat API keys like passwords:
+    
+    - Never commit to version control
+    - Rotate regularly (every 90 days)
+    - Use different keys for different environments
+
+!!! info "Header Authentication is Internal Only"
+    Only use header-based authentication for trusted internal services. Never expose this method externally.

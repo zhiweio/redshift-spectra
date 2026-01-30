@@ -1,166 +1,183 @@
 # Security Overview
 
-Redshift Spectra implements a **zero-trust security model** with defense-in-depth across all layers.
+Security is the foundation of Redshift Spectra. As an enterprise data access platform, we implement a **defense-in-depth strategy** that protects your data at every layer, from the network edge to the database row.
 
-## Security Architecture
+## Zero-Trust Security Model
+
+Redshift Spectra operates on a zero-trust principle: **never trust, always verify**. Every request is authenticated, authorized, and audited regardless of its origin.
 
 ```mermaid
 flowchart TB
-    subgraph Client["Client Layer"]
-        APP[Application]
+    subgraph ZeroTrust["🔐 Zero-Trust Security Layers"]
+        direction TB
+        
+        subgraph Layer1["Layer 1: Network Security"]
+            WAF[AWS WAF<br/>DDoS Protection]
+            TLS[TLS 1.3<br/>Encryption in Transit]
+        end
+        
+        subgraph Layer2["Layer 2: Identity & Access"]
+            AUTHN[Authentication<br/>JWT · API Key · IAM]
+            AUTHZ[Authorization<br/>Permission Checks]
+        end
+        
+        subgraph Layer3["Layer 3: Request Validation"]
+            SQL[SQL Security<br/>Injection Prevention]
+            INPUT[Input Validation<br/>Schema Enforcement]
+        end
+        
+        subgraph Layer4["Layer 4: Data Isolation"]
+            RLS[Row-Level Security<br/>Tenant Filtering]
+            RBAC[RBAC<br/>Column Access]
+        end
+        
+        subgraph Layer5["Layer 5: Audit & Compliance"]
+            AUDIT[Audit Logging<br/>Complete Trail]
+            TRACE[Distributed Tracing<br/>Request Correlation]
+        end
     end
     
-    subgraph Edge["Edge Security"]
-        WAF[AWS WAF]
-        APIGW[API Gateway]
-    end
-    
-    subgraph Auth["Authentication"]
-        AUTHZ[Lambda Authorizer]
-        JWT[JWT Validation]
-        APIKEY[API Key Validation]
-    end
-    
-    subgraph Tenant["Tenant Isolation"]
-        CONTEXT[Tenant Context]
-        DBUSER[Database User Mapping]
-    end
-    
-    subgraph Data["Data Security"]
-        RLS[Row-Level Security]
-        CLS[Column-Level Security]
-        ENCRYPT[Encryption]
-    end
-    
-    APP --> WAF
-    WAF --> APIGW
-    APIGW --> AUTHZ
-    AUTHZ --> JWT
-    AUTHZ --> APIKEY
-    AUTHZ --> CONTEXT
-    CONTEXT --> DBUSER
-    DBUSER --> RLS
-    DBUSER --> CLS
-    RLS --> ENCRYPT
+    Layer1 --> Layer2 --> Layer3 --> Layer4 --> Layer5
 ```
 
-## Security Layers
+## Security Design Principles
 
-### 1. Edge Security
+### Principle 1: Database-Level Enforcement
 
-**AWS WAF** provides protection against:
+Unlike traditional applications that enforce security in application code, Redshift Spectra delegates security enforcement to Amazon Redshift itself.
 
-- SQL injection attempts
-- Cross-site scripting (XSS)
-- Rate limiting
-- Bot mitigation
-- Geographic restrictions
+| Traditional Approach | Redshift Spectra |
+|---------------------|------------------|
+| Security logic in application code | Security enforced by database engine |
+| Developer must remember to add filters | Automatic filtering via RLS |
+| Bugs can bypass security | Database guarantees isolation |
+| Inconsistent enforcement | Uniform enforcement |
 
-**API Gateway** provides:
+This architectural decision means that **even if there's a bug in the application layer, tenant isolation cannot be violated**.
 
-- TLS termination
-- Request validation
-- Throttling
-- API key management
+### Principle 2: Least Privilege
 
-### 2. Authentication
+Every component operates with the minimum permissions required:
 
-Multiple authentication modes supported:
+- **Lambda functions** have scoped IAM roles for specific operations
+- **Database users** have restricted access to only their tenant's data
+- **API keys** can be scoped to specific operations and tenants
+- **S3 access** is limited to specific prefixes per tenant
 
-| Mode | Use Case | Token Lifetime |
-|------|----------|----------------|
-| API Key | Machine-to-machine | Long-lived |
-| JWT | User authentication | Short-lived |
-| IAM | AWS service calls | Temporary |
+### Principle 3: Defense in Depth
 
-### 3. Tenant Isolation
-
-Every request is associated with a tenant context:
+Security is not a single control but multiple overlapping layers:
 
 ```mermaid
-sequenceDiagram
-    participant C as Client
-    participant A as Authorizer
-    participant H as Handler
-    participant R as Redshift
-
-    C->>A: Request + Credentials
-    A->>A: Validate & Extract Tenant
-    A->>H: Policy + Tenant Context
-    H->>H: Map Tenant → db_user
-    H->>R: Execute as db_user
-    R->>R: Apply RLS/CLS
-    R-->>C: Filtered Results
+flowchart LR
+    REQUEST["📥 Request"] --> WAF
+    
+    subgraph Layers["Defense in Depth"]
+        WAF["🛡️ WAF<br/>Rate Limiting"] --> AUTH["🔑 Authentication"]
+        AUTH --> PERM["✅ Authorization"]
+        PERM --> SQL["🔍 SQL Validation"]
+        SQL --> RLS["🔒 Row-Level Security"]
+    end
+    
+    RLS --> DATA["📊 Data"]
+    
+    style Layers fill:#e8f5e9,stroke:#4caf50
 ```
 
-### 4. Data Security
+If one layer fails, others continue to protect your data.
 
-**Row-Level Security (RLS):**
+### Principle 4: Complete Auditability
 
-Tenants only see their own data:
+Every operation is logged with sufficient detail for:
 
-```sql
-CREATE RLS POLICY tenant_isolation
-ON sales
-USING (tenant_id = current_user);
-```
+- **Incident investigation** — Trace who accessed what data and when
+- **Compliance reporting** — Generate access reports for auditors
+- **Anomaly detection** — Identify unusual access patterns
+- **Forensics** — Reconstruct the full history of data access
 
-**Column-Level Security (CLS):**
+## Security Features Summary
 
-Restrict sensitive columns:
-
-```sql
-REVOKE SELECT (ssn, credit_card)
-ON customers
-FROM tenant_group;
-```
-
-**Encryption:**
-
-- Data at rest: AES-256
-- Data in transit: TLS 1.2+
-- S3 exports: Server-side encryption
-
-## Compliance Considerations
-
-| Standard | Relevant Features |
-|----------|-------------------|
-| **SOC 2** | Audit logging, access controls, encryption |
-| **GDPR** | Data isolation, encryption, right to access |
-| **HIPAA** | PHI protection, access controls, audit trails |
-| **PCI DSS** | Encryption, access logging, network isolation |
-
-## Security Checklist
-
-=== "Development"
-
-    - [ ] Use non-production credentials
-    - [ ] Enable all logging
-    - [ ] Test RLS policies work correctly
-    - [ ] Validate input sanitization
-
-=== "Production"
-
-    - [ ] Enable AWS WAF
-    - [ ] Configure VPC endpoints
-    - [ ] Set up CloudTrail
-    - [ ] Enable GuardDuty
-    - [ ] Configure SNS alerts
-    - [ ] Regular credential rotation
+| Feature | Purpose | Compliance Impact |
+|---------|---------|-------------------|
+| **TLS Encryption** | Protect data in transit | SOC 2, PCI-DSS |
+| **JWT/API Key Auth** | Identity verification | SOC 2, ISO 27001 |
+| **Row-Level Security** | Tenant data isolation | GDPR, SOC 2 |
+| **SQL Injection Prevention** | Query safety | OWASP Top 10 |
+| **Audit Logging** | Complete access trail | All frameworks |
+| **Rate Limiting** | Abuse prevention | Availability |
+| **Secret Rotation** | Credential hygiene | SOC 2, PCI-DSS |
 
 ## Threat Model
 
-| Threat | Mitigation |
-|--------|------------|
-| SQL Injection | Multi-layer validation, parameterized queries, SQLValidator |
-| Credential Theft | Short-lived tokens, Secrets Manager |
-| Data Leakage | RLS, CLS, encryption |
-| Privilege Escalation | Least-privilege IAM, database roles |
-| DDoS | WAF, API throttling, rate limiting |
-| Insider Threat | Audit logging, principle of least privilege |
+Redshift Spectra is designed to protect against these threat categories:
+
+### External Threats
+
+- **DDoS attacks** — Mitigated by AWS WAF and API Gateway throttling
+- **SQL injection** — Blocked by multi-layer SQL validation
+- **Credential stuffing** — Prevented by rate limiting and token validation
+- **Man-in-the-middle** — Prevented by TLS 1.3 encryption
+
+### Insider Threats
+
+- **Cross-tenant access** — Prevented by database-level RLS
+- **Unauthorized queries** — Blocked by SQL whitelist validation
+- **Data exfiltration** — Controlled by result size limits and audit logging
+
+### Application Vulnerabilities
+
+- **Code bugs** — Cannot bypass database-level security
+- **Misconfiguration** — Default-secure settings
+- **Dependency vulnerabilities** — Regular security updates
+
+## Compliance Considerations
+
+Redshift Spectra supports compliance with major frameworks:
+
+```mermaid
+flowchart TB
+    subgraph Frameworks["Compliance Frameworks"]
+        SOC2[SOC 2 Type II]
+        GDPR[GDPR]
+        HIPAA[HIPAA]
+        PCI[PCI-DSS]
+        ISO[ISO 27001]
+    end
+    
+    subgraph Controls["Redshift Spectra Controls"]
+        C1[Data Isolation]
+        C2[Encryption]
+        C3[Access Logging]
+        C4[Identity Management]
+        C5[Data Minimization]
+    end
+    
+    C1 --> SOC2
+    C1 --> GDPR
+    C1 --> HIPAA
+    C2 --> SOC2
+    C2 --> PCI
+    C2 --> HIPAA
+    C3 --> SOC2
+    C3 --> GDPR
+    C3 --> ISO
+    C4 --> SOC2
+    C4 --> ISO
+    C5 --> GDPR
+```
+
+!!! info "Shared Responsibility"
+    Redshift Spectra provides security controls, but compliance is a shared responsibility. You must:
+    
+    - Configure tenant mappings correctly
+    - Implement Row-Level Security policies in Redshift
+    - Manage API key lifecycle
+    - Monitor audit logs
 
 ## Next Steps
 
-- [Authentication](authentication.md) - Deep dive into auth modes
-- [Authorization](authorization.md) - RLS and CLS implementation
-- [SQL Security](sql-security.md) - SQL injection prevention and query validation
+Dive deeper into specific security topics:
+
+- [Authentication](authentication.md) — How identity is verified
+- [Authorization](authorization.md) — How permissions are enforced
+- [SQL Security](sql-security.md) — How queries are validated
