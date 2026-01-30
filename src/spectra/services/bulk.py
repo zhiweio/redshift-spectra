@@ -417,7 +417,6 @@ class BulkJobService:
                     ":state": new_state.value,
                     ":updated_at": now.isoformat(),
                     ":modstamp": now.isoformat(),
-                    ":expected_tenant": tenant_id,
                 },
                 ConditionExpression=Attr("tenant_id").eq(tenant_id),
                 ReturnValues="ALL_NEW",

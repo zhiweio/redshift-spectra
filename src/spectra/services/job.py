@@ -214,12 +214,14 @@ class JobService:
 
         # Add result for completed jobs
         if result:
-            update_expr += ", result = :result"
+            update_expr += ", #result = :result"
+            expr_names["#result"] = "result"
             expr_values[":result"] = result.model_dump(mode="json", exclude_none=True)
 
         # Add error for failed jobs
         if error:
-            update_expr += ", error = :error"
+            update_expr += ", #error = :error"
+            expr_names["#error"] = "error"
             expr_values[":error"] = error.model_dump(mode="json", exclude_none=True)
 
         try:
