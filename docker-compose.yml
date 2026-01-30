@@ -1,0 +1,88 @@
+# =============================================================================
+# Docker Compose - LocalStack Development Environment
+# =============================================================================
+# This file sets up LocalStack for local development and testing.
+# It emulates AWS services required by Redshift Spectra.
+#
+# Usage:
+#   Start:   docker compose up -d
+#   Stop:    docker compose down
+#   Logs:    docker compose logs -f localstack
+#   Reset:   docker compose down -v && docker compose up -d
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # LocalStack - AWS Service Emulator
+  # ---------------------------------------------------------------------------
+  localstack:
+    container_name: redshift-spectra-localstack
+    image: localstack/localstack:latest
+    ports:
+      - "127.0.0.1:4566:4566"            # LocalStack Gateway
+      - "127.0.0.1:4510-4559:4510-4559"  # External services port range
+    environment:
+      # Core Configuration
+      - DEBUG=${DEBUG:-0}
+      - LOCALSTACK_HOST=localhost.localstack.cloud
+      - GATEWAY_LISTEN=0.0.0.0:4566
+      
+      # Services to enable (all services used by this project)
+      - SERVICES=s3,dynamodb,lambda,iam,apigateway,secretsmanager,cloudwatch,logs,sts,ssm
+      
+      # Lambda Configuration
+      - LAMBDA_EXECUTOR=docker
+      - LAMBDA_DOCKER_NETWORK=redshift-spectra-network
+      - LAMBDA_REMOVE_CONTAINERS=true
+      - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
+      
+      # S3 Configuration
+      - S3_SKIP_SIGNATURE_VALIDATION=1
+      
+      # Persistence (optional - uncomment to persist data)
+      # - PERSISTENCE=1
+      
+      # Data directory inside container
+      - DATA_DIR=/var/lib/localstack/data
+      
+      # AWS Region (match your terragrunt configuration)
+      - DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      
+      # Docker host for Lambda
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+    volumes:
+      # Mount Docker socket for Lambda execution
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist LocalStack data (optional)
+      - localstack-data:/var/lib/localstack
+      # Mount initialization scripts
+      - ./scripts/localstack:/etc/localstack/init/ready.d:ro
+
+    networks:
+      - redshift-spectra-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  redshift-spectra-network:
+    name: redshift-spectra-network
+    driver: bridge
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  localstack-data:
+    name: redshift-spectra-localstack-data

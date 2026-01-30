@@ -10,21 +10,16 @@ Before installing Redshift Spectra, ensure you have:
 |-------------|---------|---------|
 | Python | 3.11+ | Runtime environment |
 | uv | Latest | Package management |
-| AWS CLI | 2.x | AWS credential management |
+| Docker | Latest | LocalStack & Lambda layer building |
 | Terraform | >= 1.5 | Infrastructure as Code |
 | Terragrunt | >= 0.50 | DRY Terraform configuration |
-| Docker | Latest | Lambda layer building (optional) |
-
-You'll also need:
-
-- An AWS account with appropriate permissions
-- An existing Amazon Redshift cluster or Redshift Serverless workgroup
+| AWS CLI | 2.x | AWS credential management (for AWS deployments) |
 
 ## Installation Methods
 
-### Development Setup
+### Local Development (Recommended)
 
-Clone the repository and install dependencies:
+For local development using LocalStack (no AWS account required):
 
 ```bash
 # Clone the repository
@@ -34,8 +29,37 @@ cd redshift-spectra
 # Install all dependencies (including dev tools)
 make install-dev
 
-# Verify installation
-make test
+# Configure environment (defaults work for LocalStack)
+cp .env.example .env
+
+# Start LocalStack and deploy infrastructure
+make deploy-local
+
+# Verify deployment
+make localstack-status
+```
+
+See [LocalStack Setup](../development/localstack.md) for detailed local development instructions.
+
+### AWS Development Setup
+
+For deploying to AWS:
+
+```bash
+# Clone the repository
+git clone https://github.com/zhiweio/redshift-spectra.git
+cd redshift-spectra
+
+# Install all dependencies
+make install-dev
+
+# Configure for AWS
+cp .env.example .env
+# Edit .env with your AWS Redshift settings
+
+# Build and deploy
+make package-all
+make tg-apply-dev
 ```
 
 ### Production Setup
@@ -85,13 +109,32 @@ Your AWS credentials need permissions for:
 Create a `.env` file from the template:
 
 ```bash
-cp .env.template .env
+cp .env.example .env
 ```
 
-Edit the `.env` file with your configuration:
+### For LocalStack (Local Development)
+
+The default values work out of the box:
+
+```bash
+# Environment is set to local by default
+ENVIRONMENT=local
+
+# LocalStack endpoint
+LOCALSTACK_ENDPOINT=http://localhost:4566
+
+# Credentials (any non-empty value works)
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+```
+
+### For AWS (Dev/Prod)
+
+Edit the `.env` file with your AWS configuration:
 
 ```bash
 # Required settings
+ENVIRONMENT=dev
 SPECTRA_REDSHIFT_CLUSTER_ID=my-redshift-cluster
 SPECTRA_REDSHIFT_DATABASE=mydb
 SPECTRA_REDSHIFT_SECRET_ARN=arn:aws:secretsmanager:...

@@ -114,6 +114,7 @@ nav:
       - Session Reuse: performance/session-reuse.md
       - CSV Format: performance/csv-format.md
   - Development:
+      - LocalStack Setup: development/localstack.md
       - Testing: development/testing.md
       - Contributing: development/contributing.md
   - API Reference: api-reference.md

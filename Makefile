@@ -368,16 +368,117 @@ update-hooks:  ## Update pre-commit hooks
 	uv run pre-commit autoupdate
 
 # =============================================================================
-# Local Development
+# Local Development with LocalStack
 # =============================================================================
 
-local-api:  ## Run local API server (requires SAM CLI)
-	@echo -e "$(BLUE)Starting local API server...$(NC)"
-	sam local start-api --template template.yaml
+# LocalStack settings
+TG_LOCAL_DIR := $(TG_DIR)/environments/local/us-east-1
+TG_LOCAL_CONFIG := $(TG_DIR)/terragrunt-local.hcl
 
-local-invoke:  ## Invoke Lambda function locally
-	@echo -e "$(BLUE)Invoking Lambda locally...$(NC)"
-	sam local invoke ApiHandler --event events/sample-query.json
+localstack-start:  ## Start LocalStack container
+	@echo -e "$(BLUE)Starting LocalStack...$(NC)"
+	docker compose up -d localstack
+	@echo -e "$(GREEN)Waiting for LocalStack to be ready...$(NC)"
+	@for i in $$(seq 1 30); do \
+		if curl -s http://localhost:4566/_localstack/health > /dev/null 2>&1; then \
+			echo -e "$(GREEN)LocalStack is ready!$(NC)"; \
+			break; \
+		fi; \
+		echo -n "."; \
+		sleep 2; \
+	done
+
+localstack-stop:  ## Stop LocalStack container
+	@echo -e "$(BLUE)Stopping LocalStack...$(NC)"
+	docker compose down
+
+localstack-status:  ## Check LocalStack status
+	@echo -e "$(BLUE)LocalStack status:$(NC)"
+	@curl -s http://localhost:4566/_localstack/health | python3 -m json.tool 2>/dev/null || \
+		echo "LocalStack is not running. Start with: make localstack-start"
+
+localstack-logs:  ## Show LocalStack logs
+	docker compose logs -f localstack
+
+localstack-reset:  ## Reset LocalStack (destroy and recreate)
+	@echo -e "$(YELLOW)Resetting LocalStack...$(NC)"
+	docker compose down -v
+	docker compose up -d localstack
+	@$(MAKE) localstack-start
+
+# LocalStack Terragrunt commands
+tg-init-local:  ## Initialize Terragrunt for LocalStack
+	@echo -e "$(BLUE)Initializing Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run-all init --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-plan-local:  ## Plan Terragrunt changes for LocalStack
+	@echo -e "$(BLUE)Planning Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run-all plan --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-apply-local:  ## Apply Terragrunt changes for LocalStack
+	@echo -e "$(BLUE)Applying Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run-all apply --terragrunt-config $(TG_LOCAL_CONFIG) --terragrunt-non-interactive
+
+tg-destroy-local:  ## Destroy LocalStack infrastructure
+	@echo -e "$(RED)Destroying LocalStack infrastructure...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run-all destroy --terragrunt-config $(TG_LOCAL_CONFIG) --terragrunt-non-interactive
+
+tg-output-local:  ## Show Terragrunt outputs for LocalStack
+	@echo -e "$(BLUE)Terragrunt outputs (LocalStack):$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run-all output --terragrunt-config $(TG_LOCAL_CONFIG)
+
+# Module-specific LocalStack commands
+tg-plan-dynamodb-local:  ## Plan DynamoDB module for LocalStack
+	@echo -e "$(BLUE)Planning DynamoDB (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-apply-dynamodb-local:  ## Apply DynamoDB module for LocalStack
+	@echo -e "$(BLUE)Applying DynamoDB (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-s3-local:  ## Plan S3 module for LocalStack
+	@echo -e "$(BLUE)Planning S3 (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-apply-s3-local:  ## Apply S3 module for LocalStack
+	@echo -e "$(BLUE)Applying S3 (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-iam-local:  ## Plan IAM module for LocalStack
+	@echo -e "$(BLUE)Planning IAM (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-apply-iam-local:  ## Apply IAM module for LocalStack
+	@echo -e "$(BLUE)Applying IAM (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-secrets-local:  ## Plan Secrets module for LocalStack
+	@echo -e "$(BLUE)Planning Secrets (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --terragrunt-config $(TG_LOCAL_CONFIG)
+
+tg-apply-secrets-local:  ## Apply Secrets module for LocalStack
+	@echo -e "$(BLUE)Applying Secrets (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --terragrunt-config $(TG_LOCAL_CONFIG) --auto-approve
+
+# Full local deployment workflow
+deploy-local: localstack-start tg-apply-local  ## Deploy to LocalStack (start + apply)
+	@echo -e "$(GREEN)Deployed to LocalStack!$(NC)"
+	@echo ""
+	@echo "LocalStack endpoint: http://localhost:4566"
+	@echo "Use AWS CLI with: aws --endpoint-url=http://localhost:4566 ..."
 
 # =============================================================================
 # CI/CD Helpers

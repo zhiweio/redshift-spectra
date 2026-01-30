@@ -92,6 +92,12 @@ override.tf.json
 terragrunt-debug.log
 backend.tf
 provider.tf
+**/terraform.tfstate
+**/terraform.tfstate.backup
+
+# LocalStack
+volume/
+localstack-data/
 
 # AWS SAM
 .aws-sam/

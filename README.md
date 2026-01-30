@@ -67,17 +67,32 @@ flowchart TB
 
 ## 🚀 Quick Start
 
+### Local Development (Recommended)
+
 ```bash
 # Clone and install
 git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
 make install-dev
 
-# Configure
-cp .env.template .env
-# Edit .env with your Redshift settings
+# Configure (defaults work for LocalStack)
+cp .env.example .env
 
-# Build and deploy
+# Start LocalStack and deploy
+make deploy-local
+
+# Verify deployment
+make localstack-status
+```
+
+### AWS Deployment
+
+```bash
+# Configure for AWS
+cp .env.example .env
+# Edit .env with your AWS Redshift settings
+
+# Build and deploy to dev
 make package-all
 make tg-apply-dev
 ```
@@ -187,6 +202,28 @@ Full documentation is available at **[zhiweio.github.io/redshift-spectra](https:
 | [API Reference](docs/api-reference.md) | Complete REST API specification |
 
 ## 🛠️ Development
+
+### Local Development with LocalStack
+
+For local development and testing without AWS costs:
+
+```bash
+# Start LocalStack
+make localstack-start
+
+# Deploy infrastructure to LocalStack
+make deploy-local
+
+# Check status
+make localstack-status
+
+# Clean up
+make localstack-stop
+```
+
+See the [LocalStack documentation](docs/development/localstack.md) for more details.
+
+### Running Tests
 
 ```bash
 # Install dev dependencies
