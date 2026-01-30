@@ -48,7 +48,7 @@ Permissions can come from multiple sources:
 ```mermaid
 flowchart TB
     subgraph Sources["Permission Sources"]
-        JWT[JWT Claims<br/>permissions: [...]]
+        JWT["JWT Claims<br/>permissions: [...]"]
         LOOKUP[API Key Lookup<br/>tenant_permissions table]
         DEFAULT[Default Permissions<br/>query:execute, bulk:read]
     end
@@ -258,7 +258,7 @@ flowchart TB
     end
     
     subgraph Expected["Expected Behavior"]
-        E1[Query: SELECT COUNT(*) FROM orders]
+        E1["Query: SELECT COUNT(*) FROM orders"]
         E2[Result: 1000 rows<br/>All belong to tenant_a]
     end
     

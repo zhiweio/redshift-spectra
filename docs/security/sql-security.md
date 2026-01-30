@@ -174,7 +174,8 @@ Parameterized queries separate SQL structure from data values:
 ```mermaid
 flowchart TB
     subgraph Vulnerable["❌ String Concatenation"]
-        BAD["SELECT * FROM users WHERE id = '" + user_input + "'"]
+        %% 使用 #quot; 代替内部的双引号
+        BAD["SELECT * FROM users WHERE id = '#quot; + user_input + #quot;'"]
         ATTACK["user_input = ' OR 1=1 --"]
         RESULT1["SELECT * FROM users WHERE id = '' OR 1=1 --'"]
     end
