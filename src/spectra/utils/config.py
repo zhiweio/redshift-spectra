@@ -47,10 +47,14 @@ class Settings(BaseSettings):
     dynamodb_table_name: str = Field(
         default="spectra-jobs", description="DynamoDB table for job state"
     )
+    dynamodb_bulk_table_name: str = Field(
+        default="spectra-bulk-jobs", description="DynamoDB table for bulk job state"
+    )
     dynamodb_sessions_table_name: str = Field(
         default="spectra-sessions", description="DynamoDB table for Redshift sessions"
     )
     dynamodb_ttl_days: int = Field(default=7, description="TTL for job records in days")
+    bulk_job_ttl_days: int = Field(default=30, description="TTL for bulk job records in days")
 
     # S3 Configuration
     s3_bucket_name: str = Field(..., description="S3 bucket for large result exports")

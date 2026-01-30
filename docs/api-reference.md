@@ -286,29 +286,10 @@ GET /bulk/jobs/{job_id}/upload-url
 
 ### Get Results
 
-Download successful results.
+Download job results.
 
 ```
 GET /bulk/jobs/{job_id}/results
-```
-
-**Response: `200 OK`**
-
-```json
-{
-  "download_url": "https://s3.amazonaws.com/...",
-  "expires_at": "2026-01-29T11:00:00Z"
-}
-```
-
----
-
-### Get Failed Results
-
-Download failed records.
-
-```
-GET /bulk/jobs/{job_id}/failed-results
 ```
 
 **Response: `200 OK`**

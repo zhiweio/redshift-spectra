@@ -94,12 +94,8 @@ curl "$API_URL/bulk/jobs/bulk-job-abc123" \
 ### 5. Get Results
 
 ```bash
-# Download successful records
+# Download job results
 curl "$API_URL/bulk/jobs/bulk-job-abc123/results" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Download failed records
-curl "$API_URL/bulk/jobs/bulk-job-abc123/failed-results" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -212,17 +208,7 @@ GET /v1/bulk/jobs?state=InProgress&limit=25
 
 ## Error Handling
 
-Failed records are collected and available for download:
-
-```json
-{
-  "sf__Error": "INVALID_VALUE",
-  "sf__Id": null,
-  "id": "123",
-  "name": "Test",
-  "email": "invalid-email"
-}
-```
+Errors are returned in the job results with details about which records failed.
 
 ## Best Practices
 

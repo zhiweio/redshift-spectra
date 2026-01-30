@@ -6,10 +6,10 @@ supporting multiple authentication modes (API Key, JWT, IAM).
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from functools import wraps
+from typing import Any, Callable
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.event_handler import current_event
 from aws_lambda_powertools.event_handler.exceptions import UnauthorizedError
 from aws_lambda_powertools.utilities.data_classes import APIGatewayProxyEvent
 
@@ -271,10 +271,14 @@ def _extract_from_headers(
     )
 
 
-def require_permission(permission: str):
+def require_permission(permission: str) -> Callable:
     """Decorator to require a specific permission.
 
+    This decorator must be used with an APIResolver app that provides
+    current_event access.
+
     Usage:
+        @app.post("/admin")
         @require_permission("admin")
         def admin_only_endpoint():
             pass
@@ -286,10 +290,17 @@ def require_permission(permission: str):
         Decorator function
     """
 
-    def decorator(func):
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
         def wrapper(*args, **kwargs):
-            # Get tenant context from request
-            tenant_ctx = extract_tenant_context(current_event)
+            # The event should be passed as the first argument or available via app
+            # When used with APIResolver, the event is typically available via app.current_event
+            # For direct Lambda handlers, the event is the first argument
+            event = args[0] if args else kwargs.get("event")
+            if event is None:
+                raise ValueError("No event available for permission check")
+
+            tenant_ctx = extract_tenant_context(event)
 
             if not tenant_ctx.has_permission(permission):
                 raise UnauthorizedError(f"Missing required permission: {permission}")

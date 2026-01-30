@@ -3,7 +3,7 @@
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.exceptions import (
     BadRequestError,
     NotFoundError,
@@ -30,7 +30,7 @@ settings = get_settings()
 
 @app.get("/v1/jobs/<job_id>/results")
 @tracer.capture_method
-def get_job_results(job_id: str) -> dict[str, Any]:
+def get_job_results(job_id: str) -> Response:
     """Get the results of a completed job.
 
     For small result sets, returns inline JSON.
@@ -58,8 +58,12 @@ def get_job_results(job_id: str) -> dict[str, Any]:
         # Get job from DynamoDB
         job = job_service.get_job(job_id, tenant_id=tenant_ctx.tenant_id)
 
+        # Get status value
+        job_status_str = job.status if isinstance(job.status, str) else job.status.value
+        job_status = JobStatus(job.status) if isinstance(job.status, str) else job.status
+
         # Check if job is completed
-        if job.status == JobStatus.FAILED:
+        if job_status == JobStatus.FAILED:
             return api_response(
                 200,
                 {
@@ -69,8 +73,8 @@ def get_job_results(job_id: str) -> dict[str, Any]:
                 },
             )
 
-        if job.status != JobStatus.COMPLETED:
-            raise BadRequestError(f"Job is not completed. Current status: {job.status.value}")
+        if job_status != JobStatus.COMPLETED:
+            raise BadRequestError(f"Job is not completed. Current status: {job_status_str}")
 
         # If results already exported to S3, return presigned URL
         if job.result and job.result.location != "inline":
@@ -88,6 +92,22 @@ def get_job_results(job_id: str) -> dict[str, Any]:
                     "format": job.result.format,
                     "size_bytes": job.result.size_bytes,
                     "row_count": job.result.row_count,
+                },
+            )
+
+        # If inline data already available in job result, return it directly
+        if job.result and job.result.location == "inline":
+            return api_response(
+                200,
+                {
+                    "job_id": job.job_id,
+                    "status": "COMPLETED",
+                    "metadata": {
+                        "columns": job.result.columns,
+                        "column_types": job.result.column_types,
+                        "row_count": job.result.row_count,
+                        "size_bytes": job.result.size_bytes,
+                    },
                 },
             )
 

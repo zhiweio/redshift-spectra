@@ -3,7 +3,7 @@
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.exceptions import (
     BadRequestError,
     InternalServerError,
@@ -19,7 +19,7 @@ from spectra.models.query import QueryRequest, QueryResponse
 from spectra.services.job import DuplicateJobError, JobService
 from spectra.services.redshift import QueryExecutionError, RedshiftService
 from spectra.utils.config import get_settings
-from spectra.utils.response import api_response
+from spectra.utils.response import api_response, created_response
 from spectra.utils.sql_validator import SQLSecurityLevel, SQLValidationError, SQLValidator
 
 logger = Logger()
@@ -44,7 +44,7 @@ def _get_sql_validator() -> SQLValidator:
 
 @app.post("/v1/queries")
 @tracer.capture_method
-def submit_query() -> dict[str, Any]:
+def submit_query() -> Response:
     """Submit a query for execution.
 
     Returns:
@@ -134,7 +134,7 @@ def submit_query() -> dict[str, Any]:
         # Build response
         response = QueryResponse(
             job_id=job.job_id,
-            status=job.status.value,
+            status=job.status if isinstance(job.status, str) else job.status.value,
             submitted_at=job.created_at,
             tenant_id=tenant_ctx.tenant_id,
             estimated_duration_seconds=30,  # Default estimate
@@ -148,7 +148,9 @@ def submit_query() -> dict[str, Any]:
         existing_job = job_service.get_job(e.existing_job_id)
         response = QueryResponse(
             job_id=existing_job.job_id,
-            status=existing_job.status.value,
+            status=existing_job.status
+            if isinstance(existing_job.status, str)
+            else existing_job.status.value,
             submitted_at=existing_job.created_at,
             tenant_id=tenant_ctx.tenant_id,
         )

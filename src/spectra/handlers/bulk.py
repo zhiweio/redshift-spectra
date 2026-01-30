@@ -14,7 +14,7 @@ Workflow:
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.exceptions import (
     BadRequestError,
     NotFoundError,
@@ -48,7 +48,7 @@ app = APIGatewayRestResolver()
 
 @app.post("/v1/bulk/jobs")
 @tracer.capture_method
-def create_bulk_job() -> dict[str, Any]:
+def create_bulk_job() -> Response:
     """Create a new bulk job.
 
     For QUERY (export) operations:
@@ -109,7 +109,7 @@ def create_bulk_job() -> dict[str, Any]:
     logger.info(
         "Bulk job created",
         extra={
-            "job_id": job.id,
+            "job_id": job.job_id,
             "operation": request.operation.value,
             "content_type": request.content_type.value,
         },
@@ -120,7 +120,7 @@ def create_bulk_job() -> dict[str, Any]:
 
 @app.get("/v1/bulk/jobs/<job_id>")
 @tracer.capture_method
-def get_bulk_job(job_id: str) -> dict[str, Any]:
+def get_bulk_job(job_id: str) -> Response:
     """Get bulk job information.
 
     Args:
@@ -147,7 +147,7 @@ def get_bulk_job(job_id: str) -> dict[str, Any]:
 
 @app.patch("/v1/bulk/jobs/<job_id>")
 @tracer.capture_method
-def update_bulk_job(job_id: str) -> dict[str, Any]:
+def update_bulk_job(job_id: str) -> Response:
     """Update bulk job state.
 
     Valid state transitions:
@@ -195,7 +195,7 @@ def update_bulk_job(job_id: str) -> dict[str, Any]:
 
 @app.delete("/v1/bulk/jobs/<job_id>")
 @tracer.capture_method
-def delete_bulk_job(job_id: str) -> dict[str, Any]:
+def delete_bulk_job(job_id: str) -> Response:
     """Delete a bulk job.
 
     Only jobs in terminal states can be deleted.
@@ -227,7 +227,7 @@ def delete_bulk_job(job_id: str) -> dict[str, Any]:
 
 @app.get("/v1/bulk/jobs")
 @tracer.capture_method
-def list_bulk_jobs() -> dict[str, Any]:
+def list_bulk_jobs() -> Response:
     """List bulk jobs for the current tenant.
 
     Query Parameters:
@@ -280,7 +280,7 @@ def list_bulk_jobs() -> dict[str, Any]:
 
 @app.put("/v1/bulk/jobs/<job_id>/batches")
 @tracer.capture_method
-def upload_batch_data(job_id: str) -> dict[str, Any]:
+def upload_batch_data(job_id: str) -> Response:
     """Upload data for a bulk import job.
 
     The request body should contain the data in the format specified
@@ -336,7 +336,7 @@ def upload_batch_data(job_id: str) -> dict[str, Any]:
 
 @app.get("/v1/bulk/jobs/<job_id>/results")
 @tracer.capture_method
-def get_bulk_job_results(job_id: str) -> dict[str, Any]:
+def get_bulk_job_results(job_id: str) -> Response:
     """Get results for a completed bulk job.
 
     For QUERY (export) jobs:
@@ -369,80 +369,6 @@ def get_bulk_job_results(job_id: str) -> dict[str, Any]:
         result = bulk_service.get_job_results(job_id, tenant_id=tenant_ctx.tenant_id)
 
         return api_response(200, result)
-
-    except BulkJobNotFoundError:
-        raise NotFoundError(f"Bulk job not found: {job_id}")
-
-
-@app.get("/v1/bulk/jobs/<job_id>/failed")
-@tracer.capture_method
-def get_failed_records(job_id: str) -> dict[str, Any]:
-    """Get failed records for a bulk import job.
-
-    Args:
-        job_id: Bulk job identifier
-
-    Returns:
-        Failed records with error details
-    """
-    try:
-        tenant_ctx: TenantContext = extract_tenant_context(app.current_event)
-    except ValueError as e:
-        raise UnauthorizedError(str(e))
-
-    logger.append_keys(tenant_id=tenant_ctx.tenant_id, job_id=job_id)
-
-    bulk_service = BulkJobService()
-
-    try:
-        failed_records = bulk_service.get_failed_records(job_id, tenant_id=tenant_ctx.tenant_id)
-
-        return api_response(
-            200,
-            {
-                "job_id": job_id,
-                "failed_records": failed_records,
-                "count": len(failed_records),
-            },
-        )
-
-    except BulkJobNotFoundError:
-        raise NotFoundError(f"Bulk job not found: {job_id}")
-
-
-@app.get("/v1/bulk/jobs/<job_id>/successful")
-@tracer.capture_method
-def get_successful_records(job_id: str) -> dict[str, Any]:
-    """Get successfully processed records for a bulk import job.
-
-    Args:
-        job_id: Bulk job identifier
-
-    Returns:
-        Successful records with created/updated IDs
-    """
-    try:
-        tenant_ctx: TenantContext = extract_tenant_context(app.current_event)
-    except ValueError as e:
-        raise UnauthorizedError(str(e))
-
-    logger.append_keys(tenant_id=tenant_ctx.tenant_id, job_id=job_id)
-
-    bulk_service = BulkJobService()
-
-    try:
-        successful_records = bulk_service.get_successful_records(
-            job_id, tenant_id=tenant_ctx.tenant_id
-        )
-
-        return api_response(
-            200,
-            {
-                "job_id": job_id,
-                "successful_records": successful_records,
-                "count": len(successful_records),
-            },
-        )
 
     except BulkJobNotFoundError:
         raise NotFoundError(f"Bulk job not found: {job_id}")

@@ -394,11 +394,15 @@ class BulkJobService:
         """
         current_job = self.get_job(job_id, tenant_id)
 
+        # Get current state - it's a string due to use_enum_values=True
+        current_state_value = current_job.state
+        current_state = BulkJobState(current_state_value)
+
         # Validate state transition
-        if not self._is_valid_transition(BulkJobState(current_job.state), new_state):
+        if not self._is_valid_transition(current_state, new_state):
             raise BulkJobStateError(
                 job_id=job_id,
-                current_state=current_job.state.value,
+                current_state=current_state_value,
                 requested_state=new_state.value,
             )
 
@@ -423,7 +427,7 @@ class BulkJobService:
                 "Bulk job state updated",
                 extra={
                     "job_id": job_id,
-                    "old_state": current_job.state.value,
+                    "old_state": current_state_value,
                     "new_state": new_state.value,
                 },
             )
@@ -700,9 +704,10 @@ class BulkJobService:
             state=BulkJobState(item["state"]),
             object=item.get("object"),
             created_by_id=item.get("tenant_id", ""),
-            created_date=datetime.fromisoformat(item["created_at"]),
+            created_at=datetime.fromisoformat(item["created_at"]),
             system_modstamp=datetime.fromisoformat(item.get("system_modstamp", item["updated_at"])),
             content_type=DataFormat(item.get("content_type", "CSV")),
+            compression=CompressionType(item.get("compression", "GZIP")),
             line_ending=LineEnding(item.get("line_ending", "LF")),
             column_delimiter=item.get("column_delimiter", ","),
             number_records_processed=item.get("number_records_processed", 0),

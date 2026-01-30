@@ -3,7 +3,7 @@
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.event_handler.exceptions import (
     NotFoundError,
     UnauthorizedError,
@@ -25,7 +25,7 @@ app = APIGatewayRestResolver()
 
 @app.get("/v1/jobs/<job_id>")
 @tracer.capture_method
-def get_job_status(job_id: str) -> dict[str, Any]:
+def get_job_status(job_id: str) -> Response:
     """Get the status of a job.
 
     Args:
@@ -49,13 +49,16 @@ def get_job_status(job_id: str) -> dict[str, Any]:
         # Get job from DynamoDB
         job = job_service.get_job(job_id, tenant_id=tenant_ctx.tenant_id)
 
+        # Convert status to enum if it's a string (due to use_enum_values config)
+        job_status = JobStatus(job.status) if isinstance(job.status, str) else job.status
+
         # If job is still running, check Redshift for updates
-        if not job.status.is_terminal and job.statement_id:
+        if not job_status.is_terminal and job.statement_id:
             try:
                 statement_info = redshift_service.describe_statement(job.statement_id)
                 new_status = _map_redshift_status(statement_info["status"])
 
-                if new_status != job.status:
+                if new_status != job_status:
                     # Update job status
                     if new_status == JobStatus.COMPLETED:
                         job = job_service.update_job_completed(
@@ -77,13 +80,15 @@ def get_job_status(job_id: str) -> dict[str, Any]:
                     "Statement not found in Redshift", extra={"statement_id": job.statement_id}
                 )
 
-        logger.info("Job status retrieved", extra={"status": job.status.value})
+        # Get status value
+        status_str = job.status if isinstance(job.status, str) else job.status.value
+        logger.info("Job status retrieved", extra={"status": status_str})
 
         return api_response(
             200,
             {
                 "job_id": job.job_id,
-                "status": job.status.value,
+                "status": status_str,
                 "submitted_at": job.created_at.isoformat(),
                 "started_at": job.started_at.isoformat() if job.started_at else None,
                 "completed_at": job.completed_at.isoformat() if job.completed_at else None,
@@ -100,7 +105,7 @@ def get_job_status(job_id: str) -> dict[str, Any]:
 
 @app.get("/v1/jobs")
 @tracer.capture_method
-def list_jobs() -> dict[str, Any]:
+def list_jobs() -> Response:
     """List jobs for the current tenant.
 
     Returns:
@@ -136,7 +141,7 @@ def list_jobs() -> dict[str, Any]:
             "jobs": [
                 {
                     "job_id": job.job_id,
-                    "status": job.status.value,
+                    "status": job.status if isinstance(job.status, str) else job.status.value,
                     "submitted_at": job.created_at.isoformat(),
                     "completed_at": job.completed_at.isoformat() if job.completed_at else None,
                 }
