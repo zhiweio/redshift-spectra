@@ -525,6 +525,55 @@ class SQLValidator:
             )
 
 
+def inject_limit(sql: str, max_rows: int) -> tuple[str, int | None]:
+    """Inject or adjust LIMIT clause to enforce row limits.
+
+    This function implements the LIMIT+1 strategy for detecting truncation:
+    - If query has no LIMIT, adds LIMIT (max_rows + 1)
+    - If query has LIMIT > max_rows, replaces with LIMIT (max_rows + 1)
+    - If query has LIMIT <= max_rows, keeps original LIMIT
+
+    Args:
+        sql: SQL query to modify
+        max_rows: Maximum rows to return (will add +1 for truncation detection)
+
+    Returns:
+        Tuple of (modified_sql, original_limit or None)
+    """
+    sql = sql.strip().rstrip(";")
+    upper_sql = sql.upper()
+
+    # Pattern to match LIMIT clause at the end of the query
+    # Handles: LIMIT n, LIMIT n OFFSET m
+    limit_pattern = re.compile(
+        r"\bLIMIT\s+(\d+)(\s+OFFSET\s+\d+)?\s*$",
+        re.IGNORECASE,
+    )
+
+    match = limit_pattern.search(sql)
+
+    if match:
+        original_limit = int(match.group(1))
+        offset_clause = match.group(2) or ""
+
+        if original_limit > max_rows:
+            # Replace with our limit (+1 for truncation detection)
+            new_sql = limit_pattern.sub(f"LIMIT {max_rows + 1}{offset_clause}", sql)
+            return new_sql, original_limit
+        else:
+            # Keep original limit as it's within our threshold
+            return sql, original_limit
+    else:
+        # No LIMIT clause, add one (+1 for truncation detection)
+        # Need to insert LIMIT before ORDER BY if present, otherwise at end
+        # Actually LIMIT comes after ORDER BY in SQL
+
+        # Check for trailing ORDER BY clause
+        # Insert LIMIT at the very end
+        new_sql = f"{sql} LIMIT {max_rows + 1}"
+        return new_sql, None
+
+
 def validate_sql(
     sql: str,
     security_level: SQLSecurityLevel = SQLSecurityLevel.STANDARD,

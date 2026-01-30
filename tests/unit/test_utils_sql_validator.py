@@ -469,3 +469,93 @@ class TestSQLValidationError:
         """Test error with default empty details."""
         error = SQLValidationError(message="Error", error_code="CODE")
         assert error.details == {}
+
+
+class TestInjectLimit:
+    """Tests for inject_limit function."""
+
+    def test_inject_limit_no_existing_limit(self) -> None:
+        """Test adding LIMIT to query without existing LIMIT."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        assert new_sql == "SELECT * FROM users LIMIT 1001"
+        assert original_limit is None
+
+    def test_inject_limit_with_smaller_existing_limit(self) -> None:
+        """Test query with LIMIT smaller than threshold."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users LIMIT 100"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        # Should keep original limit since it's smaller
+        assert new_sql == "SELECT * FROM users LIMIT 100"
+        assert original_limit == 100
+
+    def test_inject_limit_with_larger_existing_limit(self) -> None:
+        """Test query with LIMIT larger than threshold."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users LIMIT 5000"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        # Should replace with our limit
+        assert new_sql == "SELECT * FROM users LIMIT 1001"
+        assert original_limit == 5000
+
+    def test_inject_limit_with_offset(self) -> None:
+        """Test query with LIMIT and OFFSET."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users LIMIT 5000 OFFSET 100"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        # Should replace limit but keep offset
+        assert "LIMIT 1001" in new_sql
+        assert "OFFSET 100" in new_sql
+        assert original_limit == 5000
+
+    def test_inject_limit_with_order_by(self) -> None:
+        """Test query with ORDER BY."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users ORDER BY created_at DESC"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        assert new_sql == "SELECT * FROM users ORDER BY created_at DESC LIMIT 1001"
+        assert original_limit is None
+
+    def test_inject_limit_strips_trailing_semicolon(self) -> None:
+        """Test that trailing semicolon is stripped."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users;"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        assert new_sql == "SELECT * FROM users LIMIT 1001"
+        assert not new_sql.endswith(";")
+
+    def test_inject_limit_case_insensitive(self) -> None:
+        """Test LIMIT detection is case-insensitive."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users limit 50"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        assert original_limit == 50
+        # Should keep original limit
+        assert new_sql == "SELECT * FROM users limit 50"
+
+    def test_inject_limit_exact_threshold(self) -> None:
+        """Test query with LIMIT exactly at threshold."""
+        from spectra.utils.sql_validator import inject_limit
+
+        sql = "SELECT * FROM users LIMIT 1000"
+        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+
+        # Should keep original since it's <= threshold
+        assert new_sql == "SELECT * FROM users LIMIT 1000"
+        assert original_limit == 1000

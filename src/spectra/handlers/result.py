@@ -77,8 +77,8 @@ def get_job_results(job_id: str) -> Response:
             raise BadRequestError(f"Job is not completed. Current status: {job_status_str}")
 
         # If results already exported to S3, return presigned URL
-        if job.result and job.result.location != "inline":
-            download_url = export_service.generate_presigned_url(job.result.location)
+        if job.result and job.result.location and job.result.location != "inline":
+            download_url, expires_at = export_service.generate_presigned_url(job.result.location)
 
             return api_response(
                 200,
@@ -86,40 +86,30 @@ def get_job_results(job_id: str) -> Response:
                     "job_id": job.job_id,
                     "status": "COMPLETED",
                     "download_url": download_url,
-                    "expires_at": job.result.download_url_expires.isoformat()
-                    if job.result.download_url_expires
-                    else None,
+                    "expires_at": expires_at.isoformat() if expires_at else None,
                     "format": job.result.format,
                     "size_bytes": job.result.size_bytes,
                     "row_count": job.result.row_count,
                 },
             )
 
-        # If inline data already available in job result, return it directly
-        if job.result and job.result.location == "inline":
-            return api_response(
-                200,
-                {
-                    "job_id": job.job_id,
-                    "status": "COMPLETED",
-                    "metadata": {
-                        "columns": job.result.columns,
-                        "column_types": job.result.column_types,
-                        "row_count": job.result.row_count,
-                        "size_bytes": job.result.size_bytes,
-                    },
-                },
-            )
-
-        # Fetch results from Redshift
+        # For inline results or no cached result, fetch from Redshift
+        # Fetch results from Redshift with automatic pagination
         if not job.statement_id:
             raise BadRequestError("No statement ID found for this job")
 
-        result = redshift_service.get_statement_result(job.statement_id)
+        # Use get_all_statement_results to handle pagination automatically
+        # For inline results, we limit to threshold to avoid memory issues
+        # For S3 export, we fetch all results
+        result = redshift_service.get_all_statement_results(
+            statement_id=job.statement_id,
+            max_rows=settings.result_size_threshold
+            * 2,  # Fetch enough to determine if S3 export needed
+        )
 
         row_count = result.get("total_rows", 0)
         columns = result.get("columns", [])
-        data = result.get("data", [])
+        data = result.get("records", [])
 
         # Check if results should be offloaded to S3
         if row_count > settings.result_size_threshold:

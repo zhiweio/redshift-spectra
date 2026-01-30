@@ -44,6 +44,12 @@ class StatementNotFoundError(RedshiftError):
     pass
 
 
+class QueryTimeoutError(RedshiftError):
+    """Raised when a query exceeds the timeout limit."""
+
+    pass
+
+
 class SessionCreationError(RedshiftError):
     """Raised when session creation fails."""
 
@@ -262,6 +268,93 @@ class RedshiftService:
             )
 
     @tracer.capture_method
+    def wait_for_statement(
+        self,
+        statement_id: str,
+        timeout_seconds: int = 300,
+        poll_interval_seconds: float = 0.5,
+    ) -> dict[str, Any]:
+        """Wait for a statement to complete with polling.
+
+        Implements exponential backoff for efficient polling.
+
+        Args:
+            statement_id: The statement ID to wait for
+            timeout_seconds: Maximum time to wait (default 300s / 5 minutes)
+            poll_interval_seconds: Initial poll interval (will increase with backoff)
+
+        Returns:
+            Final statement description
+
+        Raises:
+            QueryTimeoutError: If statement doesn't complete within timeout
+            QueryExecutionError: If statement fails
+            StatementNotFoundError: If statement ID not found
+        """
+        import time
+
+        start_time = time.time()
+        current_interval = poll_interval_seconds
+        max_interval = 5.0  # Cap backoff at 5 seconds
+
+        logger.info(
+            "Waiting for statement completion",
+            extra={"statement_id": statement_id, "timeout_seconds": timeout_seconds},
+        )
+
+        while True:
+            elapsed = time.time() - start_time
+
+            if elapsed >= timeout_seconds:
+                logger.warning(
+                    "Statement timed out",
+                    extra={"statement_id": statement_id, "elapsed_seconds": elapsed},
+                )
+                raise QueryTimeoutError(
+                    message=f"Query exceeded timeout of {timeout_seconds} seconds",
+                    code="QUERY_TIMEOUT",
+                    details={"statement_id": statement_id, "timeout_seconds": timeout_seconds},
+                )
+
+            description = self.describe_statement(statement_id)
+            status = description["status"]
+
+            if status == "FINISHED":
+                logger.info(
+                    "Statement completed",
+                    extra={
+                        "statement_id": statement_id,
+                        "duration_ms": description.get("duration", 0),
+                        "result_rows": description.get("result_rows", 0),
+                    },
+                )
+                return description
+
+            if status == "FAILED":
+                error_msg = description.get("error", "Unknown error")
+                logger.error(
+                    "Statement failed",
+                    extra={"statement_id": statement_id, "error": error_msg},
+                )
+                raise QueryExecutionError(
+                    message=f"Query failed: {error_msg}",
+                    code="QUERY_FAILED",
+                    details={"statement_id": statement_id, "error": error_msg},
+                )
+
+            if status == "ABORTED":
+                logger.warning("Statement was aborted", extra={"statement_id": statement_id})
+                raise QueryExecutionError(
+                    message="Query was cancelled",
+                    code="QUERY_CANCELLED",
+                    details={"statement_id": statement_id},
+                )
+
+            # Still running, wait and retry with exponential backoff
+            time.sleep(current_interval)
+            current_interval = min(current_interval * 1.5, max_interval)
+
+    @tracer.capture_method
     def get_statement_result(
         self,
         statement_id: str,
@@ -415,6 +508,106 @@ class RedshiftService:
             "total_rows": response.get("TotalNumRows", len(records)),
             "next_token": response.get("NextToken"),
             "format": "TYPED",
+        }
+
+    @tracer.capture_method
+    def get_all_statement_results(
+        self,
+        statement_id: str,
+        use_csv_format: bool = True,
+        max_rows: int | None = None,
+    ) -> dict[str, Any]:
+        """Get all results of a completed statement with automatic pagination.
+
+        Handles pagination automatically by following NextToken until all
+        results are retrieved or max_rows is reached.
+
+        Args:
+            statement_id: The statement ID
+            use_csv_format: Use CSV format for faster response (default True)
+            max_rows: Optional maximum number of rows to retrieve (for inline results)
+
+        Returns:
+            Complete result data with all records merged
+
+        Raises:
+            RedshiftError: If getting results fails
+        """
+        all_records: list[dict[str, Any]] = []
+        columns: list[dict[str, Any]] = []
+        next_token: str | None = None
+        total_rows = 0
+        result_format = "CSV" if use_csv_format else "TYPED"
+        page_count = 0
+
+        logger.info(
+            "Fetching all statement results",
+            extra={"statement_id": statement_id, "max_rows": max_rows},
+        )
+
+        while True:
+            page_count += 1
+            result = self.get_statement_result(
+                statement_id=statement_id,
+                next_token=next_token,
+                use_csv_format=use_csv_format,
+            )
+
+            # Store columns from first page
+            if not columns:
+                columns = result.get("columns", [])
+
+            # Append records
+            page_records = result.get("records", [])
+            all_records.extend(page_records)
+
+            # Update total rows from API response
+            if result.get("total_rows"):
+                total_rows = result["total_rows"]
+
+            # Update format from response
+            if result.get("format"):
+                result_format = result["format"]
+
+            logger.debug(
+                "Fetched result page",
+                extra={
+                    "page": page_count,
+                    "page_records": len(page_records),
+                    "total_fetched": len(all_records),
+                },
+            )
+
+            # Check if we've reached max_rows limit
+            if max_rows and len(all_records) >= max_rows:
+                logger.info(
+                    "Reached max_rows limit, stopping pagination",
+                    extra={"max_rows": max_rows, "fetched": len(all_records)},
+                )
+                all_records = all_records[:max_rows]
+                break
+
+            # Check for more pages
+            next_token = result.get("next_token")
+            if not next_token:
+                break
+
+        logger.info(
+            "Completed fetching all results",
+            extra={
+                "statement_id": statement_id,
+                "pages_fetched": page_count,
+                "total_records": len(all_records),
+                "total_rows_reported": total_rows,
+            },
+        )
+
+        return {
+            "columns": columns,
+            "records": all_records,
+            "total_rows": total_rows or len(all_records),
+            "format": result_format,
+            "pages_fetched": page_count,
         }
 
     @tracer.capture_method

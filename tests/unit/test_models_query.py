@@ -2,8 +2,9 @@
 
 Tests cover:
 - QueryParameter validation
-- QueryRequest validation
+- QueryRequest validation (sync-only API)
 - QueryResponse serialization
+- ResultMetadata for truncation handling
 - BulkQueryItem validation
 - Edge cases and error handling
 """
@@ -19,6 +20,7 @@ from spectra.models.query import (
     QueryParameter,
     QueryRequest,
     QueryResponse,
+    ResultMetadata,
 )
 
 
@@ -79,11 +81,9 @@ class TestQueryRequest:
         """Test creating valid query request."""
         request = QueryRequest(
             sql="SELECT * FROM users WHERE id = 1",
-            output_format=OutputFormat.JSON,
         )
         assert "SELECT" in request.sql
-        assert request.output_format == OutputFormat.JSON
-        assert request.async_mode is True  # default
+        assert request.timeout_seconds == 60  # default
 
     def test_sql_stripped(self) -> None:
         """Test that SQL is stripped of whitespace."""
@@ -140,9 +140,9 @@ class TestQueryRequest:
         with pytest.raises(ValidationError):
             QueryRequest(sql="SELECT 1", timeout_seconds=0)
 
-        # Timeout too high
+        # Timeout too high (max 300 seconds for sync queries)
         with pytest.raises(ValidationError):
-            QueryRequest(sql="SELECT 1", timeout_seconds=86401)
+            QueryRequest(sql="SELECT 1", timeout_seconds=301)
 
     def test_parameters_list(self) -> None:
         """Test query with parameters."""
@@ -155,18 +155,124 @@ class TestQueryRequest:
         assert len(request.parameters) == 1
         assert request.parameters[0].name == "user_id"
 
-    def test_output_formats(self) -> None:
-        """Test all output format options."""
-        for fmt in OutputFormat:
-            request = QueryRequest(sql="SELECT 1", output_format=fmt)
-            assert request.output_format == fmt
+    def test_default_timeout(self) -> None:
+        """Test default timeout value."""
+        request = QueryRequest(sql="SELECT 1")
+        assert request.timeout_seconds == 60
 
-    def test_async_alias(self) -> None:
-        """Test that 'async' alias works."""
-        # Using model_validate to test alias
-        data = {"sql": "SELECT 1", "async": False}
-        request = QueryRequest.model_validate(data)
-        assert request.async_mode is False
+    def test_idempotency_key(self) -> None:
+        """Test idempotency key field."""
+        request = QueryRequest(
+            sql="SELECT 1",
+            idempotency_key="unique-key-123",
+        )
+        assert request.idempotency_key == "unique-key-123"
+
+    def test_idempotency_key_max_length(self) -> None:
+        """Test idempotency key max length."""
+        # Should work with 128 chars
+        request = QueryRequest(sql="SELECT 1", idempotency_key="a" * 128)
+        assert len(request.idempotency_key) == 128
+
+        # Should fail with 129 chars
+        with pytest.raises(ValidationError):
+            QueryRequest(sql="SELECT 1", idempotency_key="a" * 129)
+
+    def test_metadata_field(self) -> None:
+        """Test custom metadata field."""
+        request = QueryRequest(
+            sql="SELECT 1",
+            metadata={"source": "dashboard", "report_id": "r-123"},
+        )
+        assert request.metadata == {"source": "dashboard", "report_id": "r-123"}
+
+    def test_metadata_none_by_default(self) -> None:
+        """Test metadata is None by default."""
+        request = QueryRequest(sql="SELECT 1")
+        assert request.metadata is None
+
+    def test_timeout_boundary_values(self) -> None:
+        """Test timeout boundary values."""
+        # Minimum (1 second)
+        request = QueryRequest(sql="SELECT 1", timeout_seconds=1)
+        assert request.timeout_seconds == 1
+
+        # Maximum (300 seconds for sync)
+        request = QueryRequest(sql="SELECT 1", timeout_seconds=300)
+        assert request.timeout_seconds == 300
+
+    def test_sql_with_newlines(self) -> None:
+        """Test SQL with newlines is accepted."""
+        sql = """
+        SELECT
+            id,
+            name
+        FROM users
+        WHERE status = 'active'
+        """
+        request = QueryRequest(sql=sql)
+        assert "SELECT" in request.sql
+
+    def test_sql_with_comments(self) -> None:
+        """Test SQL with comments."""
+        sql = "SELECT * FROM users -- get all users"
+        request = QueryRequest(sql=sql)
+        assert "users" in request.sql
+
+
+class TestResultMetadata:
+    """Tests for ResultMetadata model."""
+
+    def test_basic_metadata(self) -> None:
+        """Test creating basic result metadata."""
+        metadata = ResultMetadata(
+            columns=[{"name": "id", "type": "int4"}],
+            row_count=100,
+        )
+        assert metadata.row_count == 100
+        assert metadata.truncated is False
+        assert metadata.message is None
+
+    def test_truncated_metadata(self) -> None:
+        """Test metadata with truncation flag."""
+        metadata = ResultMetadata(
+            columns=[{"name": "id", "type": "int4"}],
+            row_count=10000,
+            truncated=True,
+            message="Result exceeds limit. Use bulk API.",
+        )
+        assert metadata.truncated is True
+        assert "bulk" in metadata.message.lower()
+
+    def test_execution_time(self) -> None:
+        """Test metadata with execution time."""
+        metadata = ResultMetadata(
+            columns=[],
+            row_count=0,
+            execution_time_ms=250,
+        )
+        assert metadata.execution_time_ms == 250
+
+    def test_zero_row_count(self) -> None:
+        """Test metadata with zero rows."""
+        metadata = ResultMetadata(
+            columns=[{"name": "id", "type": "int4"}],
+            row_count=0,
+        )
+        assert metadata.row_count == 0
+
+    def test_multiple_columns(self) -> None:
+        """Test metadata with multiple columns."""
+        metadata = ResultMetadata(
+            columns=[
+                {"name": "id", "type": "int4"},
+                {"name": "name", "type": "varchar"},
+                {"name": "amount", "type": "numeric"},
+                {"name": "created_at", "type": "timestamp"},
+            ],
+            row_count=50,
+        )
+        assert len(metadata.columns) == 4
 
 
 class TestQueryResponse:
@@ -174,43 +280,140 @@ class TestQueryResponse:
 
     def test_valid_response(self) -> None:
         """Test creating valid response."""
-        now = datetime.now(UTC)
-        response = QueryResponse(
-            job_id="job-123",
-            status="QUEUED",
-            submitted_at=now,
-            tenant_id="tenant-456",
-        )
-        assert response.job_id == "job-123"
-        assert response.status == "QUEUED"
-        assert response.tenant_id == "tenant-456"
-
-    def test_optional_fields(self) -> None:
-        """Test optional fields default to None."""
-        response = QueryResponse(
-            job_id="job-123",
-            status="QUEUED",
-            submitted_at=datetime.now(UTC),
-            tenant_id="tenant-456",
-        )
-        assert response.estimated_duration_seconds is None
-        assert response.poll_url is None
-        assert response.result_url is None
-
-    def test_response_serialization(self) -> None:
-        """Test response serialization to JSON."""
-        now = datetime.now(UTC)
         response = QueryResponse(
             job_id="job-123",
             status="COMPLETED",
-            submitted_at=now,
-            tenant_id="tenant-456",
-            estimated_duration_seconds=30,
+        )
+        assert response.job_id == "job-123"
+        assert response.status == "COMPLETED"
+
+    def test_response_with_data(self) -> None:
+        """Test response with inline data."""
+        from spectra.models.query import ResultMetadata
+
+        response = QueryResponse(
+            job_id="job-123",
+            status="COMPLETED",
+            data=[{"id": 1}, {"id": 2}],
+            metadata=ResultMetadata(
+                columns=[{"name": "id", "type": "int4"}],
+                row_count=2,
+                truncated=False,
+            ),
+        )
+        assert len(response.data) == 2
+        assert response.metadata.row_count == 2
+        assert response.metadata.truncated is False
+
+    def test_response_with_truncation(self) -> None:
+        """Test response with truncated results."""
+        from spectra.models.query import ResultMetadata
+
+        response = QueryResponse(
+            job_id="job-123",
+            status="COMPLETED",
+            data=[{"id": i} for i in range(100)],
+            metadata=ResultMetadata(
+                columns=[{"name": "id", "type": "int4"}],
+                row_count=100,
+                truncated=True,
+                message="Result exceeds limit. Use bulk API.",
+            ),
+        )
+        assert response.metadata.truncated is True
+        assert "bulk" in response.metadata.message.lower()
+
+    def test_response_with_error(self) -> None:
+        """Test response with error."""
+        response = QueryResponse(
+            job_id="job-123",
+            status="FAILED",
+            error={"code": "QUERY_FAILED", "message": "Syntax error"},
+        )
+        assert response.status == "FAILED"
+        assert response.error["code"] == "QUERY_FAILED"
+
+    def test_response_serialization(self) -> None:
+        """Test response serialization to JSON."""
+        response = QueryResponse(
+            job_id="job-123",
+            status="COMPLETED",
+            data=[{"id": 1}],
+            metadata=ResultMetadata(
+                columns=[{"name": "id", "type": "int4"}],
+                row_count=1,
+                execution_time_ms=150,
+            ),
         )
         data = response.model_dump(mode="json")
         assert data["job_id"] == "job-123"
-        assert data["estimated_duration_seconds"] == 30
-        assert isinstance(data["submitted_at"], str)
+        assert data["metadata"]["execution_time_ms"] == 150
+
+    def test_response_timeout_status(self) -> None:
+        """Test response with TIMEOUT status."""
+        response = QueryResponse(
+            job_id="job-timeout",
+            status="TIMEOUT",
+            error={
+                "code": "QUERY_TIMEOUT",
+                "message": "Query exceeded 300 seconds. Use bulk API.",
+            },
+        )
+        assert response.status == "TIMEOUT"
+        assert response.error["code"] == "QUERY_TIMEOUT"
+        assert response.data is None
+
+    def test_response_all_statuses(self) -> None:
+        """Test all valid response statuses."""
+        for status in ["COMPLETED", "FAILED", "TIMEOUT"]:
+            response = QueryResponse(job_id="job-123", status=status)
+            assert response.status == status
+
+    def test_response_with_empty_data(self) -> None:
+        """Test response with empty data array."""
+        response = QueryResponse(
+            job_id="job-empty",
+            status="COMPLETED",
+            data=[],
+            metadata=ResultMetadata(
+                columns=[{"name": "id", "type": "int4"}],
+                row_count=0,
+            ),
+        )
+        assert response.data == []
+        assert response.metadata.row_count == 0
+
+    def test_response_with_complex_data_types(self) -> None:
+        """Test response with various data types."""
+        response = QueryResponse(
+            job_id="job-complex",
+            status="COMPLETED",
+            data=[
+                {
+                    "id": 1,
+                    "name": "Test",
+                    "amount": 99.99,
+                    "active": True,
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "tags": ["a", "b"],
+                    "metadata": {"key": "value"},
+                }
+            ],
+            metadata=ResultMetadata(
+                columns=[
+                    {"name": "id", "type": "int4"},
+                    {"name": "name", "type": "varchar"},
+                    {"name": "amount", "type": "numeric"},
+                    {"name": "active", "type": "bool"},
+                    {"name": "created_at", "type": "timestamp"},
+                    {"name": "tags", "type": "super"},
+                    {"name": "metadata", "type": "super"},
+                ],
+                row_count=1,
+            ),
+        )
+        assert response.data[0]["amount"] == 99.99
+        assert response.data[0]["active"] is True
 
 
 class TestBulkQueryItem:

@@ -31,11 +31,15 @@ class QueryParameter(BaseModel):
 
 
 class QueryRequest(BaseModel):
-    """Request model for submitting a query."""
+    """Request model for submitting a synchronous query.
+
+    This endpoint is designed for small-to-medium result sets with quick responses.
+    For large datasets or long-running queries, use the /v1/bulk API instead.
+    """
 
     sql: str = Field(
         ...,
-        description="SQL query to execute",
+        description="SQL query to execute (SELECT only)",
         min_length=1,
         max_length=100000,
     )
@@ -44,20 +48,11 @@ class QueryRequest(BaseModel):
         description="Query parameters for parameterized queries",
         max_length=100,
     )
-    output_format: OutputFormat = Field(
-        default=OutputFormat.JSON,
-        description="Desired output format",
-    )
-    async_mode: bool = Field(
-        default=True,
-        alias="async",
-        description="Whether to execute asynchronously",
-    )
-    timeout_seconds: int | None = Field(
-        default=None,
-        description="Query timeout in seconds",
+    timeout_seconds: int = Field(
+        default=60,
+        description="Query timeout in seconds (max 300)",
         ge=1,
-        le=86400,
+        le=300,
     )
     idempotency_key: str | None = Field(
         default=None,
@@ -66,7 +61,7 @@ class QueryRequest(BaseModel):
     )
     metadata: dict[str, Any] | None = Field(
         default=None,
-        description="Custom metadata to attach to the job",
+        description="Custom metadata to attach to the job for audit purposes",
     )
 
     model_config = {"populate_by_name": True}
@@ -114,24 +109,42 @@ class QueryRequest(BaseModel):
         return v
 
 
-class QueryResponse(BaseModel):
-    """Response model for query submission."""
+class ResultMetadata(BaseModel):
+    """Metadata for query results."""
 
-    job_id: str = Field(..., description="Unique job identifier")
-    status: str = Field(..., description="Current job status")
-    submitted_at: datetime = Field(..., description="Submission timestamp")
-    tenant_id: str = Field(..., description="Tenant identifier")
-    estimated_duration_seconds: int | None = Field(
-        default=None,
-        description="Estimated query duration",
+    columns: list[dict[str, Any]] = Field(..., description="Column definitions with name and type")
+    row_count: int = Field(..., description="Number of rows returned", ge=0)
+    truncated: bool = Field(
+        default=False, description="Whether results were truncated due to size limit"
     )
-    poll_url: str | None = Field(
-        default=None,
-        description="URL to poll for status updates",
+    execution_time_ms: int | None = Field(
+        default=None, description="Query execution time in milliseconds"
     )
-    result_url: str | None = Field(
+    message: str | None = Field(
+        default=None, description="Additional message (e.g., truncation warning)"
+    )
+
+
+class QueryResponse(BaseModel):
+    """Response model for synchronous query execution.
+
+    Returns inline data for small result sets, or partial data with truncation
+    warning for larger datasets.
+    """
+
+    job_id: str = Field(..., description="Unique job identifier (for audit trail)")
+    status: str = Field(..., description="Query status: COMPLETED, FAILED, or TIMEOUT")
+    data: list[dict[str, Any]] | None = Field(
         default=None,
-        description="URL to retrieve results when ready",
+        description="Query results as JSON array",
+    )
+    metadata: ResultMetadata | None = Field(
+        default=None,
+        description="Result metadata including columns and row count",
+    )
+    error: dict[str, Any] | None = Field(
+        default=None,
+        description="Error details if query failed",
     )
 
 
@@ -190,7 +203,6 @@ class BulkQueryResponse(BaseModel):
 
     batch_id: str = Field(..., description="Unique batch identifier")
     total_queries: int = Field(..., description="Total number of queries submitted")
-    jobs: list[QueryResponse] = Field(..., description="Individual job responses")
     submitted_at: datetime = Field(..., description="Batch submission timestamp")
     status_url: str | None = Field(
         default=None,
@@ -198,19 +210,8 @@ class BulkQueryResponse(BaseModel):
     )
 
 
-class ResultMetadata(BaseModel):
-    """Metadata for query results."""
-
-    columns: list[str] = Field(..., description="Column names")
-    column_types: list[str] | None = Field(default=None, description="Column data types")
-    row_count: int = Field(..., description="Total row count", ge=0)
-    size_bytes: int | None = Field(default=None, description="Result size in bytes")
-    truncated: bool = Field(default=False, description="Whether results were truncated")
-    execution_time_ms: int | None = Field(default=None, description="Query execution time")
-
-
 class QueryResultResponse(BaseModel):
-    """Response model for query results."""
+    """Response model for query results (used by result handler)."""
 
     job_id: str = Field(..., description="Job identifier")
     status: str = Field(..., description="Job status")
@@ -226,5 +227,5 @@ class QueryResultResponse(BaseModel):
         default=None,
         description="Download URL expiration time",
     )
-    format: OutputFormat = Field(..., description="Result format")
+    format: OutputFormat = Field(default=OutputFormat.JSON, description="Result format")
     metadata: ResultMetadata | None = Field(default=None, description="Result metadata")
