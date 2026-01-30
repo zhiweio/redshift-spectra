@@ -1,11 +1,13 @@
 site_name: Redshift Spectra
 site_description: Turn your Amazon Redshift into a secure, scalable Data-as-a-Service platform
-site_url: https://zhiweio.github.io/redshift-spectra
+site_url: https://zhiweio.github.io/redshift-spectra/
 repo_name: zhiweio/redshift-spectra
 repo_url: https://github.com/zhiweio/redshift-spectra
+edit_uri: edit/main/docs/
 
 theme:
   name: material
+  language: en
   palette:
     - scheme: default
       primary: indigo
@@ -25,12 +27,17 @@ theme:
     - navigation.sections
     - navigation.expand
     - navigation.top
+    - navigation.footer
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.annotate
     - content.tabs.link
+    - content.action.edit
   icon:
     repo: fontawesome/brands/github
+    edit: material/pencil
 
 plugins:
   - search
@@ -62,9 +69,22 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/zhiweio/redshift-spectra
+      name: GitHub Repository
+  generator: false
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX  # Replace with your GA4 ID or remove this section
 
 extra_javascript:
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+
+extra_css: []
+
+# Exclude files from build
+exclude_docs: |
+  __pycache__/
+  *.py[cod]
+  .DS_Store
 
 nav:
   - Home: index.md
