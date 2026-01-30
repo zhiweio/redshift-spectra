@@ -39,6 +39,7 @@ dependencies = [
     "boto3>=1.34.0",
     "pydantic-settings>=2.1.0",
     "pyarrow>=14.0.0",
+    "aws-xray-sdk>=2.15.0",
 ]
 
 [project.optional-dependencies]
@@ -177,6 +178,12 @@ markers = [
     "e2e: End-to-end tests",
 ]
 asyncio_mode = "auto"
+# Disable X-Ray tracing during tests
+env = [
+    "POWERTOOLS_TRACE_DISABLED=true",
+    "AWS_XRAY_SDK_ENABLED=false",
+    "AWS_XRAY_CONTEXT_MISSING=LOG_ERROR",
+]
 
 # =============================================================================
 # Coverage Configuration
