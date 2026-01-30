@@ -3,27 +3,23 @@
 Tests for the BulkJobService class that manages bulk import/export operations.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
 
 from spectra.models.bulk import (
-    BulkJobInfo,
     BulkJobState,
     BulkOperation,
     CompressionType,
     DataFormat,
-    LineEnding,
 )
 from spectra.services.bulk import (
     BulkJobNotFoundError,
     BulkJobService,
     BulkJobStateError,
 )
-
 
 # =============================================================================
 # BulkJobService Tests
@@ -159,7 +155,7 @@ class TestBulkJobService:
 
     def test_create_job_missing_object_for_import(self, bulk_service: BulkJobService) -> None:
         """Test that object name is required for import operations."""
-        with pytest.raises(ValueError, match="Object.*is required"):
+        with pytest.raises(ValueError, match=r"Object.*is required"):
             bulk_service.create_job(
                 tenant_id="tenant-123",
                 db_user="user_tenant_123",
@@ -203,7 +199,7 @@ class TestBulkJobService:
         job2 = self._make_bulk_job_item("bulk-2", "tenant-123")
         mock_dynamodb_table.query.return_value = {"Items": [job1, job2]}
 
-        jobs, next_key = bulk_service.list_jobs("tenant-123")
+        jobs, _next_key = bulk_service.list_jobs("tenant-123")
 
         assert len(jobs) == 2
         assert jobs[0].id == "bulk-1"

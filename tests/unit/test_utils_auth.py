@@ -4,7 +4,6 @@ Tests for authentication and authorization utilities.
 """
 
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,7 +20,6 @@ from spectra.utils.auth import (
     get_secret,
     validate_api_key,
 )
-
 
 # =============================================================================
 # TenantContext Tests

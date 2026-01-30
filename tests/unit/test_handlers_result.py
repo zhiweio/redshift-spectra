@@ -132,19 +132,21 @@ class TestResultHandler:
             with patch("spectra.handlers.result.JobService") as mock_svc:
                 mock_svc.return_value.get_job.return_value = job
 
-                with patch("spectra.handlers.result.ExportService"):
-                    with patch("spectra.handlers.result.RedshiftService") as mock_rs:
-                        # Mock Redshift result for inline mode (with pagination support)
-                        mock_rs.return_value.get_all_statement_results.return_value = {
-                            "total_rows": 10,
-                            "columns": [{"name": "id", "type": "integer"}],
-                            "records": [{"id": 1}, {"id": 2}],
-                            "format": "CSV",
-                            "pages_fetched": 1,
-                        }
-                        result = app.resolve(event, mock_context)
+                with (
+                    patch("spectra.handlers.result.ExportService"),
+                    patch("spectra.handlers.result.RedshiftService") as mock_rs,
+                ):
+                    # Mock Redshift result for inline mode (with pagination support)
+                    mock_rs.return_value.get_all_statement_results.return_value = {
+                        "total_rows": 10,
+                        "columns": [{"name": "id", "type": "integer"}],
+                        "records": [{"id": 1}, {"id": 2}],
+                        "format": "CSV",
+                        "pages_fetched": 1,
+                    }
+                    result = app.resolve(event, mock_context)
 
-                        assert result["statusCode"] == 200
+                    assert result["statusCode"] == 200
 
     def test_get_result_failed_job(self, mock_context):
         """Test getting result for failed job returns error info."""

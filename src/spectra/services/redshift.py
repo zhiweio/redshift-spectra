@@ -8,6 +8,7 @@ Optimized with:
 
 import csv
 import io
+import time
 from typing import Any
 
 import boto3
@@ -291,8 +292,6 @@ class RedshiftService:
             QueryExecutionError: If statement fails
             StatementNotFoundError: If statement ID not found
         """
-        import time
-
         start_time = time.time()
         current_interval = poll_interval_seconds
         max_interval = 5.0  # Cap backoff at 5 seconds

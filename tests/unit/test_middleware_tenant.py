@@ -3,15 +3,12 @@
 Tests for the tenant context extraction middleware.
 """
 
-import json
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from spectra.middleware.tenant import (
     TenantContext,
-    TenantExtractionError,
     _extract_from_api_key,
     _extract_from_authorizer,
     _extract_from_headers,
@@ -19,7 +16,6 @@ from spectra.middleware.tenant import (
     extract_tenant_context,
     require_permission,
 )
-
 
 # =============================================================================
 # TenantContext Tests

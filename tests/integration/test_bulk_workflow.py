@@ -4,11 +4,9 @@ These tests verify the complete bulk import/export workflow
 using mocked AWS services.
 """
 
-import json
 import os
-from datetime import UTC, datetime
-from typing import Any, Generator
-from unittest.mock import MagicMock, patch
+from collections.abc import Generator
+from typing import Any
 
 import boto3
 import pytest
@@ -20,7 +18,6 @@ from spectra.models.bulk import (
     CompressionType,
     DataFormat,
 )
-
 
 # =============================================================================
 # Integration Test Fixtures
@@ -258,7 +255,7 @@ class TestBulkImportIntegration:
 
         assert job.state == BulkJobState.UPLOAD_COMPLETE
 
-        # Processing (InProgress)
+        # InProgress state
         job = bulk_service.update_job_state(
             job_id=job.id,
             tenant_id=job.created_by_id,
@@ -318,7 +315,7 @@ class TestBulkJobManagementIntegration:
 
     def test_get_job_with_tenant_validation(self, mock_aws_services: dict[str, Any]) -> None:
         """Test that job retrieval validates tenant access."""
-        from spectra.services.bulk import BulkJobService, BulkJobNotFoundError
+        from spectra.services.bulk import BulkJobNotFoundError, BulkJobService
 
         bulk_service = BulkJobService()
 
@@ -421,7 +418,7 @@ class TestBulkJobErrorHandling:
             )
 
         # Insert without object name
-        with pytest.raises(ValueError, match="Object.*is required"):
+        with pytest.raises(ValueError, match=r"Object.*is required"):
             bulk_service.create_job(
                 tenant_id="val-tenant",
                 db_user="user_val",

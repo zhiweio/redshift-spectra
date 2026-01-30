@@ -159,7 +159,7 @@ def submit_query() -> Response:
         job_service.update_job_submitted(job.job_id, statement_id)
 
         # Wait for query completion (synchronous polling)
-        description = redshift_service.wait_for_statement(
+        redshift_service.wait_for_statement(
             statement_id=statement_id,
             timeout_seconds=request.timeout_seconds,
         )
@@ -233,7 +233,7 @@ def submit_query() -> Response:
             f"Duplicate query detected. Use different idempotency_key or wait for job {e.existing_job_id}"
         )
 
-    except QueryTimeoutError as e:
+    except QueryTimeoutError:
         logger.warning("Query timed out", extra={"timeout": request.timeout_seconds})
         metrics.add_metric(name="QueryTimeout", unit=MetricUnit.Count, value=1)
 

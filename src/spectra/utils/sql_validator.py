@@ -541,7 +541,6 @@ def inject_limit(sql: str, max_rows: int) -> tuple[str, int | None]:
         Tuple of (modified_sql, original_limit or None)
     """
     sql = sql.strip().rstrip(";")
-    upper_sql = sql.upper()
 
     # Pattern to match LIMIT clause at the end of the query
     # Handles: LIMIT n, LIMIT n OFFSET m

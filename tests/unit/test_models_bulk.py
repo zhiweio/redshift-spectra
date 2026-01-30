@@ -8,7 +8,7 @@ Tests cover:
 - Edge cases and error handling
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -28,7 +28,6 @@ from spectra.models.bulk import (
     DataFormat,
     LineEnding,
 )
-
 
 # =============================================================================
 # Enum Tests
@@ -287,7 +286,7 @@ class TestBulkJobInfo:
 
     def test_valid_info(self) -> None:
         """Test creating valid job info."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         info = BulkJobInfo(
             id="bulk-123",
             operation=BulkOperation.QUERY,
@@ -304,7 +303,7 @@ class TestBulkJobInfo:
 
     def test_info_with_urls(self) -> None:
         """Test info with content URL."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         info = BulkJobInfo(
             id="bulk-123",
             operation=BulkOperation.INSERT,
@@ -322,7 +321,7 @@ class TestBulkJobInfo:
 
     def test_info_with_error(self) -> None:
         """Test info for failed job."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         info = BulkJobInfo(
             id="bulk-123",
             operation=BulkOperation.QUERY,
@@ -364,7 +363,7 @@ class TestBulkJobResult:
 
     def test_with_download_urls(self) -> None:
         """Test result with download URLs."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = BulkJobResult(
             number_records_processed=100,
             successful_results_url="https://s3.amazonaws.com/bucket/success.csv",
@@ -381,7 +380,7 @@ class TestBulkJobResponse:
 
     def test_info_only(self) -> None:
         """Test response with info only."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         info = BulkJobInfo(
             id="bulk-123",
             operation=BulkOperation.QUERY,
@@ -398,7 +397,7 @@ class TestBulkJobResponse:
 
     def test_with_results(self) -> None:
         """Test response with both info and results."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         info = BulkJobInfo(
             id="bulk-123",
             operation=BulkOperation.QUERY,
@@ -433,7 +432,7 @@ class TestBulkJobListResponse:
 
     def test_paginated_list(self) -> None:
         """Test paginated job list."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         jobs = [
             BulkJobInfo(
                 id=f"bulk-{i}",
@@ -470,7 +469,7 @@ class TestBulkJob:
     @pytest.fixture
     def sample_bulk_job(self) -> BulkJob:
         """Create sample bulk job for testing."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return BulkJob(
             job_id="bulk-abc123",
             tenant_id="tenant-123",
@@ -493,7 +492,7 @@ class TestBulkJob:
 
     def test_default_values(self) -> None:
         """Test default values."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",
@@ -510,7 +509,7 @@ class TestBulkJob:
 
     def test_import_job_creation(self) -> None:
         """Test import job with object."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",
@@ -529,7 +528,7 @@ class TestBulkJob:
         """Test conversion to BulkJobInfo."""
         info = sample_bulk_job.to_info(
             content_url="s3://bucket/results",
-            url_expires=datetime.now(timezone.utc),
+            url_expires=datetime.now(UTC),
         )
         assert info.id == "bulk-abc123"
         assert info.operation == BulkOperation.QUERY
@@ -538,7 +537,7 @@ class TestBulkJob:
 
     def test_to_info_masks_long_query(self) -> None:
         """Test that long queries are masked in info."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         long_query = "SELECT " + ", ".join([f"col{i}" for i in range(50)]) + " FROM big_table"
         job = BulkJob(
             job_id="bulk-123",
@@ -555,7 +554,7 @@ class TestBulkJob:
 
     def test_to_result(self) -> None:
         """Test conversion to BulkJobResult."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",
@@ -619,10 +618,10 @@ class TestBulkJob:
             operation=BulkOperation.QUERY,
             query="SELECT 1",
             db_user="user",
-            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-            updated_at=datetime(2024, 1, 1, 12, 0, 10, tzinfo=timezone.utc),
-            processing_started_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
-            completed_at=datetime(2024, 1, 1, 12, 0, 5, tzinfo=timezone.utc),
+            created_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            updated_at=datetime(2024, 1, 1, 12, 0, 10, tzinfo=UTC),
+            processing_started_at=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
+            completed_at=datetime(2024, 1, 1, 12, 0, 5, tzinfo=UTC),
         )
         result = job.to_result()
         assert result.total_processing_time_ms == 5000
@@ -634,7 +633,7 @@ class TestBulkJob:
 
     def test_with_statement_ids(self) -> None:
         """Test job with Redshift statement IDs."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",
@@ -649,7 +648,7 @@ class TestBulkJob:
 
     def test_with_error_details(self) -> None:
         """Test job with error information."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",
@@ -667,7 +666,7 @@ class TestBulkJob:
 
     def test_with_metadata(self) -> None:
         """Test job with custom metadata."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         job = BulkJob(
             job_id="bulk-123",
             tenant_id="tenant-123",

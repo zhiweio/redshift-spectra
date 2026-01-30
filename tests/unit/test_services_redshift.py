@@ -3,7 +3,6 @@
 Tests for the RedshiftService class that handles query execution via Data API.
 """
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +16,6 @@ from spectra.services.redshift import (
     SessionCreationError,
     StatementNotFoundError,
 )
-
 
 # =============================================================================
 # RedshiftService Tests
@@ -129,7 +127,7 @@ class TestRedshiftService:
         self,
         redshift_service: RedshiftService,
         mock_redshift_client: MagicMock,
-        mock_session_service: MagicMock,
+        _mock_session_service: MagicMock,
     ) -> None:
         """Test statement execution without session reuse."""
         mock_redshift_client.execute_statement.return_value = {"Id": "stmt-123"}
