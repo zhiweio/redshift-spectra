@@ -91,6 +91,82 @@ class ExportService:
             raise ExportError(f"Failed to export results: {e}")
 
     @tracer.capture_method
+    def write_parquet_results(
+        self,
+        job_id: str,
+        tenant_id: str,
+        columns: list[str],
+        data: list[dict[str, Any]],
+    ) -> str:
+        """Write query results to S3 in Parquet format.
+
+        Note: Parquet support requires pyarrow. Falls back to JSON if unavailable.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+            columns: Column names
+            data: Result data as list of dicts
+
+        Returns:
+            S3 URI of the result file
+
+        Raises:
+            ExportError: If export fails
+        """
+        try:
+            # Try to use pyarrow for Parquet, fall back to JSON
+            try:
+                from io import BytesIO
+
+                import pyarrow as pa
+                import pyarrow.parquet as pq
+
+                key = self._build_key(tenant_id, job_id, "parquet")
+
+                # Create PyArrow table
+                table = pa.Table.from_pylist(data)
+
+                # Write to bytes buffer
+                buffer = BytesIO()
+                pq.write_table(table, buffer)
+                buffer.seek(0)
+
+                self.s3_client.put_object(
+                    Bucket=self.settings.s3_bucket_name,
+                    Key=key,
+                    Body=buffer.getvalue(),
+                    ContentType="application/octet-stream",
+                    Metadata={
+                        "job_id": job_id,
+                        "tenant_id": tenant_id,
+                        "row_count": str(len(data)),
+                        "format": "parquet",
+                    },
+                )
+
+                s3_uri = f"s3://{self.settings.s3_bucket_name}/{key}"
+                logger.info(
+                    "Exported Parquet results to S3",
+                    extra={"s3_uri": s3_uri, "row_count": len(data)},
+                )
+
+                return s3_uri
+
+            except ImportError:
+                logger.warning("pyarrow not available, falling back to JSON export")
+                return self.write_json_results(
+                    job_id=job_id,
+                    tenant_id=tenant_id,
+                    data=data,
+                    metadata={"columns": columns, "original_format": "parquet"},
+                )
+
+        except ClientError as e:
+            logger.error("Failed to export Parquet to S3", extra={"error": str(e)})
+            raise ExportError(f"Failed to export results: {e}")
+
+    @tracer.capture_method
     def write_csv_results(
         self,
         job_id: str,
@@ -278,6 +354,71 @@ class ExportService:
         """
         date_prefix = datetime.now(UTC).strftime("%Y/%m/%d")
         return f"{self.settings.s3_prefix}{tenant_id}/{date_prefix}/{job_id}/results.{extension}"
+
+    @tracer.capture_method
+    def export_results(
+        self,
+        job_id: str,
+        tenant_id: str,
+        results: dict[str, Any],
+        format: str = "json",
+    ) -> dict[str, Any]:
+        """Export query results to S3.
+
+        Convenience method that handles result format conversion and export.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+            results: Query results with 'records' and optionally 'column_info'
+            format: Output format ('json', 'csv', 'parquet')
+
+        Returns:
+            Dict with 'location' (S3 URI) and 'size_bytes'
+
+        Raises:
+            ExportError: If export fails
+        """
+        records = results.get("records", [])
+        columns = [col.get("name", "") for col in results.get("column_info", [])]
+
+        # Convert records to list of dicts if needed
+        if records and isinstance(records[0], list):
+            data = [dict(zip(columns, row, strict=False)) for row in records]
+        else:
+            data = records
+
+        # Export based on format
+        if format.lower() == "parquet":
+            s3_uri = self.write_parquet_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                columns=columns,
+                data=data,
+            )
+        elif format.lower() == "csv":
+            s3_uri = self.write_csv_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                columns=columns,
+                data=data,
+            )
+        else:
+            s3_uri = self.write_json_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                data=data,
+                metadata={"columns": columns},
+            )
+
+        # Get size info
+        obj_info = self.get_object_info(s3_uri)
+
+        return {
+            "location": s3_uri,
+            "size_bytes": obj_info.get("size_bytes", 0),
+            "format": format,
+        }
 
     @tracer.capture_method
     def list_exports(

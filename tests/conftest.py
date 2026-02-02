@@ -6,8 +6,9 @@ including AWS service mocking, sample data, and test utilities.
 
 import json
 import os
+from collections.abc import Generator
 from datetime import UTC, datetime
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import boto3

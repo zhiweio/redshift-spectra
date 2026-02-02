@@ -14,23 +14,22 @@ resource "aws_dynamodb_table" "jobs" {
   read_capacity  = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_read_capacity : null
   write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
 
-  # Primary key
-  hash_key  = "pk"          # tenant_id
-  range_key = "sk"          # job_id
+  # Primary key - job_id for direct lookups
+  hash_key = "job_id"
 
   # Attributes
   attribute {
-    name = "pk"
+    name = "job_id"
     type = "S"
   }
 
   attribute {
-    name = "sk"
+    name = "tenant_id"
     type = "S"
   }
 
   attribute {
-    name = "job_state"
+    name = "status"
     type = "S"
   }
 
@@ -40,27 +39,27 @@ resource "aws_dynamodb_table" "jobs" {
   }
 
   attribute {
-    name = "redshift_query_id"
+    name = "statement_id"
     type = "S"
   }
 
   # Global Secondary Indexes
 
-  # GSI1: Query by job state (for monitoring/admin)
+  # GSI1: Query by tenant and status (for listing jobs by tenant)
   global_secondary_index {
-    name            = "gsi1-state"
-    hash_key        = "pk"
-    range_key       = "job_state"
+    name            = "gsi1-tenant-status"
+    hash_key        = "tenant_id"
+    range_key       = "status"
     projection_type = "ALL"
 
     read_capacity  = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_read_capacity : null
     write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
   }
 
-  # GSI2: Query by creation time (for listing/pagination)
+  # GSI2: Query by tenant and creation time (for listing/pagination)
   global_secondary_index {
-    name            = "gsi2-created"
-    hash_key        = "pk"
+    name            = "gsi2-tenant-created"
+    hash_key        = "tenant_id"
     range_key       = "created_at"
     projection_type = "ALL"
 
@@ -68,10 +67,10 @@ resource "aws_dynamodb_table" "jobs" {
     write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
   }
 
-  # GSI3: Query by Redshift query ID (for async result correlation)
+  # GSI3: Query by Redshift statement ID (for async result correlation)
   global_secondary_index {
-    name            = "gsi3-redshift-query"
-    hash_key        = "redshift_query_id"
+    name            = "gsi3-statement"
+    hash_key        = "statement_id"
     projection_type = "ALL"
 
     read_capacity  = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_read_capacity : null
@@ -168,17 +167,16 @@ resource "aws_dynamodb_table" "bulk_jobs" {
   read_capacity  = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_read_capacity : null
   write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
 
-  # Primary key
-  hash_key  = "pk"          # tenant_id
-  range_key = "sk"          # bulk_job_id
+  # Primary key - job_id for direct lookups
+  hash_key = "job_id"
 
   attribute {
-    name = "pk"
+    name = "job_id"
     type = "S"
   }
 
   attribute {
-    name = "sk"
+    name = "tenant_id"
     type = "S"
   }
 
@@ -197,10 +195,10 @@ resource "aws_dynamodb_table" "bulk_jobs" {
     type = "S"
   }
 
-  # GSI1: Query by state
+  # GSI1: Query by tenant and state
   global_secondary_index {
-    name            = "gsi1-state"
-    hash_key        = "pk"
+    name            = "gsi1-tenant-state"
+    hash_key        = "tenant_id"
     range_key       = "state"
     projection_type = "ALL"
 
@@ -208,10 +206,10 @@ resource "aws_dynamodb_table" "bulk_jobs" {
     write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
   }
 
-  # GSI2: Query by operation type
+  # GSI2: Query by tenant and operation type
   global_secondary_index {
-    name            = "gsi2-operation"
-    hash_key        = "pk"
+    name            = "gsi2-tenant-operation"
+    hash_key        = "tenant_id"
     range_key       = "operation"
     projection_type = "ALL"
 
@@ -219,10 +217,10 @@ resource "aws_dynamodb_table" "bulk_jobs" {
     write_capacity = var.jobs_table_billing_mode == "PROVISIONED" ? var.jobs_table_write_capacity : null
   }
 
-  # GSI3: Query by creation time
+  # GSI3: Query by tenant and creation time
   global_secondary_index {
-    name            = "gsi3-created"
-    hash_key        = "pk"
+    name            = "gsi3-tenant-created"
+    hash_key        = "tenant_id"
     range_key       = "created_at"
     projection_type = "ALL"
 

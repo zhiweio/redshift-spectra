@@ -11,9 +11,8 @@ Tests cover:
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import ValidationError
 
-from spectra.models.job import Job, JobError, JobResult, JobStatus, JobState
+from spectra.models.job import Job, JobError, JobResult, JobState, JobStatus
 
 
 class TestJobStatus:

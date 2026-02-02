@@ -19,12 +19,12 @@ sequenceDiagram
 
     C->>AG: Request + Credentials
     AG->>LA: Invoke Authorizer
-    
+
     LA->>LA: Validate Credentials
     LA->>LA: Extract Tenant ID
     LA->>LA: Map to DB User
     LA->>LA: Determine Permissions
-    
+
     alt Valid Credentials
         LA-->>AG: Allow Policy + Context
         AG->>H: Forward Request + Context
@@ -51,19 +51,19 @@ flowchart LR
         COGNITO[Amazon Cognito]
         AZURE[Azure AD]
     end
-    
+
     subgraph Flow["Authentication Flow"]
         USER[User] --> IdP
         IdP --> JWT[JWT Token]
         JWT --> SPECTRA[Redshift Spectra]
     end
-    
+
     subgraph Claims["Token Claims"]
         TID[tenant_id]
         DBU[db_user]
         PERMS[permissions]
     end
-    
+
     SPECTRA --> Claims
 ```
 
@@ -93,18 +93,18 @@ flowchart TB
         direction LR
         PREFIX["spk_"] --> TENANT["tenant-id"] --> SECRET["_secret-key"]
     end
-    
+
     subgraph Storage["Key Management"]
         SM[Secrets Manager]
         DDB[DynamoDB]
     end
-    
+
     subgraph Lookup["Validation Flow"]
         HASH[Hash Key]
         LOOKUP[Lookup Tenant]
         VALIDATE[Validate Permissions]
     end
-    
+
     Keys --> LOOKUP
     LOOKUP --> Storage
     Storage --> VALIDATE
@@ -133,13 +133,13 @@ flowchart LR
         SVC1[Service A] --> GW[API Gateway]
         SVC2[Service B] --> GW
     end
-    
+
     subgraph Headers["Required Headers"]
         TID["X-Tenant-ID"]
         DBU["X-DB-User"]
         DBG["X-DB-Group"]
     end
-    
+
     GW --> SPECTRA[Redshift Spectra]
     SPECTRA --> Headers
 ```
@@ -162,16 +162,16 @@ When multiple authentication methods are present, the authorizer applies this pr
 ```mermaid
 flowchart TB
     REQUEST[Incoming Request] --> CHECK1{JWT Token?}
-    
+
     CHECK1 -->|Yes| JWT[Use JWT Claims]
     CHECK1 -->|No| CHECK2{API Key?}
-    
+
     CHECK2 -->|Yes| APIKEY[Parse API Key]
     CHECK2 -->|No| CHECK3{Headers?}
-    
+
     CHECK3 -->|Yes| HEADERS[Use Headers]
     CHECK3 -->|No| DENY[401 Unauthorized]
-    
+
     JWT --> CONTEXT[Tenant Context]
     APIKEY --> CONTEXT
     HEADERS --> CONTEXT
@@ -191,19 +191,19 @@ classDiagram
         +string request_id
         +datetime authenticated_at
     }
-    
+
     class Handler {
         +process(context: TenantContext)
     }
-    
+
     class RedshiftService {
         +execute(sql, db_user)
     }
-    
+
     class AuditLog {
         +log(tenant_id, action, details)
     }
-    
+
     TenantContext --> Handler
     Handler --> RedshiftService
     Handler --> AuditLog
@@ -228,19 +228,19 @@ For JWT tokens, validation includes:
 ```mermaid
 flowchart TB
     TOKEN[JWT Token] --> SIG{Signature Valid?}
-    
+
     SIG -->|No| DENY[Deny]
     SIG -->|Yes| EXP{Not Expired?}
-    
+
     EXP -->|No| DENY
     EXP -->|Yes| AUD{Audience Valid?}
-    
+
     AUD -->|No| DENY
     AUD -->|Yes| ISS{Issuer Valid?}
-    
+
     ISS -->|No| DENY
     ISS -->|Yes| CLAIMS{Required Claims?}
-    
+
     CLAIMS -->|No| DENY
     CLAIMS -->|Yes| ALLOW[Allow]
 ```
@@ -275,7 +275,7 @@ API keys are protected through:
 
 !!! warning "Protect API Keys"
     Treat API keys like passwords:
-    
+
     - Never commit to version control
     - Rotate regularly (every 90 days)
     - Use different keys for different environments

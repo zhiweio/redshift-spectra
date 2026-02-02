@@ -10,24 +10,24 @@ SQL security in Redshift Spectra is implemented at multiple layers:
 flowchart TB
     subgraph Layers["SQL Security Layers"]
         direction TB
-        
+
         subgraph L1["Layer 1: Request Validation"]
             REQ[Request Model<br/>Basic pattern blocking]
         end
-        
+
         subgraph L2["Layer 2: SQL Validator"]
             VAL[Comprehensive Analysis<br/>Pattern matching · Complexity limits]
         end
-        
+
         subgraph L3["Layer 3: Parameterization"]
             PARAM[Parameter Binding<br/>Value separation]
         end
-        
+
         subgraph L4["Layer 4: Database Permissions"]
             PERM[RBAC/RLS<br/>Query execution limits]
         end
     end
-    
+
     SQL[User SQL] --> L1 --> L2 --> L3 --> L4 --> RS[(Redshift)]
 ```
 
@@ -45,14 +45,14 @@ Three security levels are available, each with different trade-offs:
 flowchart LR
     subgraph Levels["Security Levels"]
         direction TB
-        
+
         STRICT["STRICT<br/>━━━━━━━━<br/>• SELECT only<br/>• No subqueries<br/>• No CTEs<br/>• Minimal functions"]
-        
+
         STANDARD["STANDARD<br/>━━━━━━━━<br/>• SELECT only<br/>• Subqueries allowed<br/>• CTEs allowed<br/>• Safe functions"]
-        
+
         PERMISSIVE["PERMISSIVE<br/>━━━━━━━━<br/>• SELECT only<br/>• All subqueries<br/>• All CTEs<br/>• More functions"]
     end
-    
+
     STRICT -.->|"More restrictive"| STANDARD -.->|"Less restrictive"| PERMISSIVE
 ```
 
@@ -70,14 +70,14 @@ The validator blocks dangerous SQL patterns regardless of security level:
 flowchart TB
     subgraph Blocked["❌ Always Blocked"]
         direction TB
-        
+
         DDL["DDL Statements<br/>DROP, CREATE, ALTER, TRUNCATE"]
         DML["DML Statements<br/>INSERT, UPDATE, DELETE"]
         ADMIN["Admin Operations<br/>GRANT, REVOKE, COPY"]
         SYSTEM["System Access<br/>pg_catalog, stl_*, stv_*"]
         DANGEROUS["Dangerous Functions<br/>pg_read_file, pg_terminate"]
     end
-    
+
     SQL[User SQL] --> CHECK{Contains Blocked Pattern?}
     CHECK -->|Yes| REJECT[Reject with Error]
     CHECK -->|No| CONTINUE[Continue Validation]
@@ -119,14 +119,14 @@ Queries are analyzed for complexity to prevent resource abuse:
 ```mermaid
 flowchart TB
     SQL[Query] --> ANALYZE[Analyze Complexity]
-    
+
     ANALYZE --> JOINS{JOIN count > limit?}
     JOINS -->|Yes| DENY1[Deny: Too many JOINs]
     JOINS -->|No| SUBQ{Subquery depth > limit?}
-    
+
     SUBQ -->|Yes| DENY2[Deny: Too many subqueries]
     SUBQ -->|No| LENGTH{Query length > limit?}
-    
+
     LENGTH -->|Yes| DENY3[Deny: Query too long]
     LENGTH -->|No| ALLOW[Allow]
 ```
@@ -148,20 +148,20 @@ The Query API automatically enforces result limits to prevent memory exhaustion:
 flowchart TB
     subgraph LimitLogic["LIMIT Injection Logic"]
         direction TB
-        
+
         Q1["Query without LIMIT"] --> ADD["Add LIMIT (threshold+1)"]
         Q2["Query with LIMIT > threshold"] --> REPLACE["Replace with LIMIT (threshold+1)"]
         Q3["Query with LIMIT <= threshold"] --> KEEP["Keep original LIMIT"]
     end
-    
+
     subgraph Detection["Truncation Detection"]
         direction TB
-        
+
         EXEC["Execute Query"] --> CHECK{Rows > threshold?}
         CHECK -->|Yes| TRUNCATE["Truncate to threshold<br/>Set truncated=true"]
         CHECK -->|No| RETURN["Return all rows"]
     end
-    
+
     LimitLogic --> Detection
 ```
 
@@ -179,7 +179,7 @@ flowchart TB
         ATTACK["user_input = ' OR 1=1 --"]
         RESULT1["SELECT * FROM users WHERE id = '' OR 1=1 --'"]
     end
-    
+
     subgraph Safe["✅ Parameter Binding"]
         GOOD["SELECT * FROM users WHERE id = :user_id"]
         PARAM["user_id = ' OR 1=1 --"]
@@ -210,14 +210,14 @@ flowchart TB
         A3["SELECT * FROM users UNION SELECT * FROM secrets"]
         A4["SELECT * FROM pg_catalog.pg_user"]
     end
-    
+
     subgraph Detection["Detection & Response"]
         D1["Stacked query detected"] --> DENY1[403 Forbidden]
         D2["Comment injection detected"] --> DENY2[403 Forbidden]
         D3["UNION not allowed"] --> DENY3[403 Forbidden]
         D4["System table access blocked"] --> DENY4[403 Forbidden]
     end
-    
+
     A1 --> D1
     A2 --> D2
     A3 --> D3
@@ -241,7 +241,7 @@ When validation fails, detailed error information is returned:
 ```mermaid
 flowchart TB
     FAIL[Validation Failed] --> ERROR[Error Response]
-    
+
     ERROR --> CODE["error_code:<br/>FORBIDDEN_STATEMENT"]
     ERROR --> MSG["message:<br/>SQL contains forbidden pattern: DROP"]
     ERROR --> DETAILS["details:<br/>pattern_matched, position"]
@@ -261,28 +261,28 @@ Error codes:
 
 !!! tip "Always Use Parameters"
     Never concatenate user input into SQL strings:
-    
+
     - Use named parameters (`:param_name`)
     - Let the validator handle escaping
     - Audit parameter usage in logs
 
 !!! tip "Start with STRICT Mode"
     For external-facing APIs:
-    
+
     - Begin with STRICT security level
     - Relax only if specific queries require it
     - Document why relaxation is needed
 
 !!! warning "Monitor Validation Failures"
     High validation failure rates may indicate:
-    
+
     - Attack attempts in progress
     - Misconfigured client applications
     - Need for user education
 
 !!! info "Validation is Not a Replacement"
     SQL validation complements, but doesn't replace:
-    
+
     - Row-Level Security (data isolation)
     - RBAC (permission control)
     - Parameter binding (injection prevention)

@@ -2,7 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.5-blueviolet)](https://www.terraform.io/)
+[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.11-blueviolet)](https://www.terraform.io/)
+[![Terragrunt](https://img.shields.io/badge/terragrunt-%3E%3D0.99-blueviolet)](https://terragrunt.gruntwork.io/)
+[![LocalStack](https://img.shields.io/badge/localstack-local%20dev-ff69b4)](https://localstack.cloud/)
 [![AWS](https://img.shields.io/badge/AWS-Serverless-orange)](https://aws.amazon.com/)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://zhiweio.github.io/redshift-spectra/)
 
@@ -32,28 +34,28 @@ flowchart TB
         BI[BI Tools]
         PARTNER[Partners]
     end
-    
+
     subgraph Edge["API Layer"]
         WAF[AWS WAF]
         GW[API Gateway]
         AUTH[Lambda Authorizer]
     end
-    
+
     subgraph Compute["Compute Layer"]
         QUERY[Query Handler<br/>Synchronous]
         BULK[Bulk Handler<br/>Asynchronous]
     end
-    
+
     subgraph State["State & Storage"]
         DDB[(DynamoDB<br/>Jobs · Sessions)]
         S3[(S3<br/>Large Results)]
     end
-    
+
     subgraph Data["Data Layer"]
         RS[(Redshift<br/>RLS · RBAC)]
         SM[Secrets Manager]
     end
-    
+
     Clients --> WAF --> GW --> AUTH
     AUTH --> QUERY
     AUTH --> BULK
@@ -67,17 +69,32 @@ flowchart TB
 
 ## 🚀 Quick Start
 
+### Local Development (Recommended)
+
 ```bash
 # Clone and install
 git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
 make install-dev
 
-# Configure
-cp .env.template .env
-# Edit .env with your Redshift settings
+# Configure (defaults work for LocalStack)
+cp .env.example .env
 
-# Build and deploy
+# Start LocalStack and deploy
+make deploy-local
+
+# Verify deployment
+make localstack-status
+```
+
+### AWS Deployment
+
+```bash
+# Configure for AWS
+cp .env.example .env
+# Edit .env with your AWS Redshift settings
+
+# Build and deploy to dev
 make package-all
 make tg-apply-dev
 ```
@@ -188,6 +205,28 @@ Full documentation is available at **[zhiweio.github.io/redshift-spectra](https:
 
 ## 🛠️ Development
 
+### Local Development with LocalStack
+
+For local development and testing without AWS costs:
+
+```bash
+# Start LocalStack
+make localstack-start
+
+# Deploy infrastructure to LocalStack
+make deploy-local
+
+# Check status
+make localstack-status
+
+# Clean up
+make localstack-stop
+```
+
+> ⚠️ **Note**: Full functionality (Redshift Data API, Lambda Layers) requires [LocalStack Pro](https://localstack.cloud/pricing/). See the [LocalStack documentation](docs/development/localstack.md) for details on Community vs Pro features.
+
+### Running Tests
+
 ```bash
 # Install dev dependencies
 make install-dev
@@ -195,9 +234,12 @@ make install-dev
 # Run all tests (450+ test cases)
 make test
 
-# Lint and format
+# Lint and format Python code
 make lint
 make format
+
+# Format Terraform/Terragrunt files
+make iac-fmt
 
 # Build Lambda packages
 make package-all
@@ -217,9 +259,9 @@ redshift-spectra/
 │   ├── models/           # Request/response schemas
 │   └── utils/            # SQL validator, config, helpers
 ├── terraform/            # Terraform modules
-│   └── modules/          # API Gateway, Lambda, DynamoDB, IAM, S3
+│   └── modules/          # api-gateway, dynamodb, iam, lambda, monitoring, s3
 ├── terragrunt/           # Terragrunt configurations
-│   └── environments/     # dev, staging, prod configs
+│   └── environments/     # local, dev, prod environments
 ├── tests/                # Unit and integration tests
 │   ├── unit/             # Handler, service, utility tests
 │   └── integration/      # End-to-end workflow tests

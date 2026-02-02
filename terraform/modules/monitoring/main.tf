@@ -469,18 +469,18 @@ resource "aws_sns_topic_subscription" "email" {
 # X-Ray Tracing
 # -----------------------------------------------------------------------------
 resource "aws_xray_sampling_rule" "main" {
-  count         = var.enable_xray_tracing ? 1 : 0
-  rule_name     = "${var.project_name}-${var.environment}"
-  priority      = 1000
-  version       = 1
+  count          = var.enable_xray_tracing ? 1 : 0
+  rule_name      = "${var.project_name}-${var.environment}"
+  priority       = 1000
+  version        = 1
   reservoir_size = 5
-  fixed_rate    = 0.05
-  url_path      = "*"
-  host          = "*"
-  http_method   = "*"
-  service_type  = "*"
-  service_name  = "${var.project_name}-${var.environment}"
-  resource_arn  = "*"
+  fixed_rate     = 0.05
+  url_path       = "*"
+  host           = "*"
+  http_method    = "*"
+  service_type   = "*"
+  service_name   = "${var.project_name}-${var.environment}"
+  resource_arn   = "*"
 
   tags = var.tags
 }

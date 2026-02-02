@@ -7,7 +7,7 @@
 locals {
   aws_region   = "us-east-1"
   region_alias = "use1"
-  
+
   # Region-specific settings
   settings = {
     # Availability zones

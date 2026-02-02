@@ -9,14 +9,11 @@ Tests cover:
 - Edge cases and error handling
 """
 
-from datetime import UTC, datetime
-
 import pytest
 from pydantic import ValidationError
 
 from spectra.models.query import (
     BulkQueryItem,
-    OutputFormat,
     QueryParameter,
     QueryRequest,
     QueryResponse,

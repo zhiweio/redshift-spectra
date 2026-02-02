@@ -131,16 +131,110 @@ variable "worker_role_arn" {
 # Environment Variables
 # =============================================================================
 
+variable "environment" {
+  description = "Environment name (local, dev, prod)"
+  type        = string
+  default     = "dev"
+}
+
 variable "environment_variables" {
-  description = "Environment variables for Lambda functions"
+  description = "Additional environment variables for Lambda functions"
   type        = map(string)
   default     = {}
+}
+
+# =============================================================================
+# Redshift Configuration
+# =============================================================================
+
+variable "redshift_cluster_id" {
+  description = "Redshift cluster identifier"
+  type        = string
+  default     = ""
+}
+
+variable "redshift_database" {
+  description = "Redshift database name"
+  type        = string
+  default     = "dev"
+}
+
+variable "redshift_workgroup_name" {
+  description = "Redshift Serverless workgroup name"
+  type        = string
+  default     = "default"
+}
+
+variable "redshift_secret_arn" {
+  description = "ARN of Redshift credentials secret in Secrets Manager"
+  type        = string
+  default     = ""
+}
+
+variable "redshift_session_keep_alive_seconds" {
+  description = "Redshift session keep-alive interval in seconds"
+  type        = number
+  default     = 3600
+}
+
+variable "redshift_session_idle_timeout_seconds" {
+  description = "Redshift session idle timeout in seconds"
+  type        = number
+  default     = 300
+}
+
+# =============================================================================
+# DynamoDB Configuration
+# =============================================================================
+
+variable "dynamodb_table_name" {
+  description = "DynamoDB jobs table name"
+  type        = string
+  default     = ""
+}
+
+variable "dynamodb_sessions_table_name" {
+  description = "DynamoDB sessions table name"
+  type        = string
+  default     = ""
+}
+
+variable "dynamodb_bulk_table_name" {
+  description = "DynamoDB bulk jobs table name"
+  type        = string
+  default     = ""
+}
+
+# =============================================================================
+# S3 Configuration
+# =============================================================================
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name for data storage"
+  type        = string
+  default     = ""
+}
+
+variable "s3_use_path_style" {
+  description = "Use path-style S3 URLs (required for LocalStack)"
+  type        = bool
+  default     = false
+}
+
+# =============================================================================
+# Authentication Configuration
+# =============================================================================
+
+variable "auth_mode" {
+  description = "Authentication mode (jwt or iam)"
+  type        = string
+  default     = "jwt"
 }
 
 variable "jwt_secret_arn" {
   description = "ARN of JWT secret in Secrets Manager"
   type        = string
-  default     = null
+  default     = ""
 }
 
 variable "jwt_expiry_hours" {
@@ -159,6 +253,28 @@ variable "jwt_audience" {
   description = "JWT audience claim"
   type        = string
   default     = "redshift-spectra-api"
+}
+
+# =============================================================================
+# LocalStack Configuration
+# =============================================================================
+
+variable "is_localstack" {
+  description = "Whether running in LocalStack environment"
+  type        = bool
+  default     = false
+}
+
+variable "localstack_hostname" {
+  description = "LocalStack hostname (use host.docker.internal for Lambda containers)"
+  type        = string
+  default     = "host.docker.internal"
+}
+
+variable "aws_endpoint_url" {
+  description = "AWS endpoint URL (for LocalStack)"
+  type        = string
+  default     = ""
 }
 
 # =============================================================================

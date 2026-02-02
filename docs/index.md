@@ -23,7 +23,7 @@ flowchart TB
         T1 --> T4[No Tenant Isolation]
         T1 --> T5[Compliance Violations]
     end
-    
+
     subgraph Modern["✅ Redshift Spectra"]
         direction TB
         M1[RESTful API Layer] --> M2[Zero-Trust Security]
@@ -31,7 +31,7 @@ flowchart TB
         M1 --> M4[Database-Level Isolation]
         M1 --> M5[Full Audit Trail]
     end
-    
+
     Traditional -.->|"Transform"| Modern
 ```
 
@@ -56,7 +56,7 @@ When multiple teams, applications, or external partners need access to your data
 Redshift Spectra implements security at the **database layer**, not the application layer. This means:
 
 - **Tenant A cannot see Tenant B's data**—enforced by Redshift itself
-- **No security logic in your application code**—zero chance of bugs leaking data  
+- **No security logic in your application code**—zero chance of bugs leaking data
 - **Complete audit trail**—every query logged with tenant context
 - **Serverless scaling**—from 1 to 10,000+ concurrent users
 
@@ -129,16 +129,16 @@ flowchart TB
         subgraph Edge["Edge Layer"]
             APIGW[API Gateway<br/>Rate Limiting · WAF]
         end
-        
+
         subgraph Auth["Authentication"]
             AUTHZ[Authorizer<br/>JWT · API Key · IAM]
         end
-        
+
         subgraph Compute["Compute Layer"]
             QUERY[Query Handler<br/>Sync Execution]
             BULK[Bulk Handler<br/>Async Operations]
         end
-        
+
         subgraph State["State Layer"]
             DDB[(DynamoDB<br/>Jobs · Sessions)]
             S3[(S3<br/>Large Results)]

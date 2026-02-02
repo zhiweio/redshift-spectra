@@ -13,13 +13,13 @@ flowchart LR
         Q2[Inline Results]
         Q3["≤ 10,000 rows"]
     end
-    
+
     subgraph BulkAPI["Bulk API"]
         B1[Asynchronous]
         B2[S3 Export]
         B3[Unlimited rows]
     end
-    
+
     Client --> QueryAPI
     Client --> BulkAPI
 ```
@@ -125,7 +125,7 @@ POST /queries
 
 !!! note "Automatic LIMIT Enforcement"
     The system automatically enforces row limits to ensure predictable response sizes:
-    
+
     - If your query has no LIMIT clause, one is injected automatically
     - If your query has a LIMIT greater than the configured maximum, it's reduced
     - The `truncated` field in metadata indicates if more rows exist
@@ -319,17 +319,17 @@ sequenceDiagram
 
     Client->>API: POST /bulk/jobs (create job)
     API-->>Client: job_id, upload_url
-    
+
     Client->>S3: PUT data (if insert/update)
     Client->>API: PATCH /bulk/jobs/{id} (state=UploadComplete)
-    
+
     API->>Redshift: Execute operation
-    
+
     loop Poll Status
         Client->>API: GET /bulk/jobs/{id}
         API-->>Client: status
     end
-    
+
     Client->>API: GET /bulk/jobs/{id}/results
     API-->>Client: download_url
     Client->>S3: GET results
@@ -633,7 +633,7 @@ from typing import Optional
 
 class SpectraClient:
     """Redshift Spectra API client."""
-    
+
     def __init__(self, base_url: str, api_key: str, tenant_id: str):
         self.base_url = base_url.rstrip('/')
         self.session = requests.Session()
@@ -642,8 +642,8 @@ class SpectraClient:
             'X-Tenant-ID': tenant_id,
             'Content-Type': 'application/json'
         })
-    
-    def query(self, sql: str, limit: int = 10000, 
+
+    def query(self, sql: str, limit: int = 10000,
               timeout_seconds: int = 60) -> dict:
         """Execute a synchronous query."""
         response = self.session.post(
@@ -658,7 +658,7 @@ class SpectraClient:
         )
         response.raise_for_status()
         return response.json()
-    
+
     def create_bulk_job(self, operation: str, object_name: str,
                         query: Optional[str] = None) -> dict:
         """Create an asynchronous bulk job."""
@@ -668,14 +668,14 @@ class SpectraClient:
         }
         if query:
             payload['query'] = query
-            
+
         response = self.session.post(
             f'{self.base_url}/bulk/jobs',
             json=payload
         )
         response.raise_for_status()
         return response.json()
-    
+
     def get_bulk_job(self, job_id: str) -> dict:
         """Get bulk job status."""
         response = self.session.get(
@@ -745,11 +745,11 @@ class SpectraClient {
         parameters: { limit }
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Query failed: ${response.status}`);
     }
-    
+
     return response.json();
   }
 
@@ -767,11 +767,11 @@ class SpectraClient {
         ...(query && { query })
       })
     });
-    
+
     if (!response.ok) {
       throw new Error(`Bulk job creation failed: ${response.status}`);
     }
-    
+
     return response.json();
   }
 
@@ -780,11 +780,11 @@ class SpectraClient {
       `${this.baseUrl}/bulk/jobs/${jobId}`,
       { headers: this.headers }
     );
-    
+
     if (!response.ok) {
       throw new Error(`Get job failed: ${response.status}`);
     }
-    
+
     return response.json();
   }
 }

@@ -141,20 +141,20 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     """Request model for query submission.
-    
+
     Attributes:
         sql: The SQL query to execute.
         parameters: Optional query parameters.
         async_mode: Whether to execute asynchronously.
     """
-    
+
     sql: str
     parameters: list[dict[str, Any]] | None = None
     async_mode: bool = True
-    
+
     def validate_sql(self) -> None:
         """Validate the SQL query.
-        
+
         Raises:
             ValueError: If SQL is invalid.
         """
@@ -180,11 +180,11 @@ class TestNewFeature:
     def test_happy_path(self):
         """Test the normal use case."""
         ...
-    
+
     def test_edge_case(self):
         """Test edge cases."""
         ...
-    
+
     def test_error_handling(self):
         """Test error conditions."""
         ...

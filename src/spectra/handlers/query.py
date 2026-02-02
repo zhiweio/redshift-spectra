@@ -20,6 +20,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
 from spectra.middleware.tenant import TenantContext, extract_tenant_context
+from spectra.models.job import JobError, JobResult, JobStatus
 from spectra.models.query import QueryRequest, QueryResponse, ResultMetadata
 from spectra.services.job import DuplicateJobError, JobService
 from spectra.services.redshift import (
@@ -159,7 +160,7 @@ def submit_query() -> Response:
         job_service.update_job_submitted(job.job_id, statement_id)
 
         # Wait for query completion (synchronous polling)
-        description = redshift_service.wait_for_statement(
+        redshift_service.wait_for_statement(
             statement_id=statement_id,
             timeout_seconds=request.timeout_seconds,
         )
@@ -193,12 +194,20 @@ def submit_query() -> Response:
         # Calculate execution time
         execution_time_ms = int((time.time() - start_time) * 1000)
 
+        # Extract column names and types for JobResult
+        column_names = [col.get("name", "") for col in columns]
+        column_types = [col.get("type", "") for col in columns]
+
         # Update job status to completed
         job_service.update_job_status(
             job_id=job.job_id,
-            status="COMPLETED",
-            result_rows=len(records),
-            duration_ms=execution_time_ms,
+            status=JobStatus.COMPLETED,
+            result=JobResult(
+                row_count=len(records),
+                location="inline",
+                columns=column_names,
+                column_types=column_types,
+            ),
         )
 
         # Build response
@@ -233,13 +242,20 @@ def submit_query() -> Response:
             f"Duplicate query detected. Use different idempotency_key or wait for job {e.existing_job_id}"
         )
 
-    except QueryTimeoutError as e:
+    except QueryTimeoutError:
         logger.warning("Query timed out", extra={"timeout": request.timeout_seconds})
         metrics.add_metric(name="QueryTimeout", unit=MetricUnit.Count, value=1)
 
         # Update job status
         if job:
-            job_service.update_job_status(job.job_id, status="TIMEOUT")
+            job_service.update_job_status(
+                job.job_id,
+                status=JobStatus.TIMEOUT,
+                error=JobError(
+                    code="QUERY_TIMEOUT",
+                    message=f"Query exceeded timeout of {request.timeout_seconds} seconds",
+                ),
+            )
 
         response = QueryResponse(
             job_id=job.job_id if job else "unknown",
@@ -260,9 +276,11 @@ def submit_query() -> Response:
         if job:
             job_service.update_job_status(
                 job.job_id,
-                status="FAILED",
-                error_code=e.code,
-                error_message=str(e),
+                status=JobStatus.FAILED,
+                error=JobError(
+                    code=e.code or "QUERY_FAILED",
+                    message=str(e),
+                ),
             )
 
         response = QueryResponse(
@@ -282,9 +300,11 @@ def submit_query() -> Response:
         if job:
             job_service.update_job_status(
                 job.job_id,
-                status="FAILED",
-                error_code="INTERNAL_ERROR",
-                error_message=str(e),
+                status=JobStatus.FAILED,
+                error=JobError(
+                    code="INTERNAL_ERROR",
+                    message=str(e),
+                ),
             )
 
         raise InternalServerError(f"Failed to execute query: {e}")

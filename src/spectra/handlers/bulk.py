@@ -11,6 +11,7 @@ Workflow:
 5. Get Results: GET /v1/bulk/jobs/{job_id}/results
 """
 
+import contextlib
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
@@ -249,9 +250,20 @@ def list_bulk_jobs() -> Response:
     # Parse query parameters
     params = app.current_event.query_string_parameters or {}
     limit = min(int(params.get("limit", "50")), 100)
-    operation = params.get("operation")
-    state = params.get("state")
-    cursor = params.get("cursor")
+    operation_str = params.get("operation")
+    state_str = params.get("state")
+    next_token = params.get("cursor")  # API uses cursor, service uses next_token
+
+    # Convert to enums if provided
+    operation: BulkOperation | None = None
+    if operation_str:
+        with contextlib.suppress(ValueError):
+            operation = BulkOperation(operation_str)
+
+    state: BulkJobState | None = None
+    if state_str:
+        with contextlib.suppress(ValueError):
+            state = BulkJobState(state_str)
 
     bulk_service = BulkJobService()
 
@@ -260,7 +272,7 @@ def list_bulk_jobs() -> Response:
         operation=operation,
         state=state,
         limit=limit,
-        cursor=cursor,
+        next_token=next_token,
     )
 
     return api_response(

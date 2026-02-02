@@ -12,18 +12,18 @@ flowchart TB
         direction TB
         APP1[Application Code] --> FILTER[WHERE tenant_id = ?]
         FILTER --> DATA1[(Shared Data)]
-        
+
         RISK1[🔴 Bug = Data Leak]
         RISK2[🔴 Every Query Needs Filter]
         RISK3[🔴 Hard to Audit]
     end
-    
+
     subgraph DBLevel["✅ Database-Level Isolation"]
         direction TB
         APP2[Application Code] --> USER[Execute as tenant_user]
         USER --> RLS[Row-Level Security]
         RLS --> DATA2[(Shared Data)]
-        
+
         SAFE1[🟢 Guaranteed Isolation]
         SAFE2[🟢 No Code Changes]
         SAFE3[🟢 Built-in Audit]
@@ -73,7 +73,7 @@ sequenceDiagram
     Note over A: Extract tenant_id from token
     A->>A: Map tenant → db_user
     A-->>H: Policy + Tenant Context
-    
+
     H->>RS: Execute as db_user
     Note over RS: RLS Policy activates
     Note over RS: WHERE tenant_id = current_user()
@@ -92,7 +92,7 @@ flowchart LR
         APIKEY[API Key<br/>tenant prefix]
         HEADER[Request Header<br/>X-Tenant-ID]
     end
-    
+
     Sources --> EXTRACT[Extract Tenant ID]
     EXTRACT --> VALIDATE[Validate]
     VALIDATE --> CONTEXT[Tenant Context]
@@ -117,18 +117,18 @@ flowchart LR
         T2[globex-inc]
         T3[initech]
     end
-    
+
     subgraph Users["Database Users"]
         U1[db_user_acme]
         U2[db_user_globex]
         U3[db_user_initech]
     end
-    
+
     subgraph Groups["Database Groups"]
         G1[tenant_readers]
         G2[tenant_writers]
     end
-    
+
     T1 --> U1
     T2 --> U2
     T3 --> U3
@@ -152,19 +152,19 @@ flowchart TB
     subgraph Query["User Query"]
         SQL["SELECT * FROM sales"]
     end
-    
+
     subgraph RLS["RLS Policy"]
         POLICY["USING (tenant_id = current_user_name())"]
     end
-    
+
     subgraph Execution["Actual Execution"]
         ACTUAL["SELECT * FROM sales<br/>WHERE tenant_id = 'acme'"]
     end
-    
+
     subgraph Results["Filtered Results"]
         DATA["Only acme's data"]
     end
-    
+
     Query --> RLS
     RLS --> Execution
     Execution --> Results
@@ -186,12 +186,12 @@ flowchart TB
         C4[internal_cost ❌]
         C5[margin ❌]
     end
-    
+
     subgraph Access["Column Access"]
         ALLOW[Tenant Can See]
         DENY[Tenant Cannot See]
     end
-    
+
     C1 --> ALLOW
     C2 --> ALLOW
     C3 --> ALLOW
@@ -217,28 +217,28 @@ flowchart TB
         WAF[WAF Rules]
         RATE[Rate Limiting]
     end
-    
+
     subgraph L2["Layer 2: Authentication"]
         TOKEN[Token Validation]
         TENANT[Tenant Extraction]
     end
-    
+
     subgraph L3["Layer 3: Authorization"]
         PERM[Permission Check]
         MAP[User Mapping]
     end
-    
+
     subgraph L4["Layer 4: SQL Validation"]
         BLOCK[Block Dangerous SQL]
         LIMIT[Enforce Limits]
     end
-    
+
     subgraph L5["Layer 5: Database"]
         RLS[Row-Level Security]
         CLS[Column-Level Security]
         AUDIT[Audit Logging]
     end
-    
+
     L1 --> L2 --> L3 --> L4 --> L5
 ```
 
@@ -272,11 +272,11 @@ flowchart LR
     subgraph Mapping["Direct Mapping"]
         T[tenant-123] --> U[db_user_123]
     end
-    
+
     subgraph RLS["RLS Policy"]
         P["tenant_id = 'tenant-123'"]
     end
-    
+
     Mapping --> RLS
 ```
 
@@ -293,13 +293,13 @@ flowchart TB
         T2[Standard Tenant]
         T3[Trial Tenant]
     end
-    
+
     subgraph Roles
         R1[enterprise_role<br/>Full access]
         R2[standard_role<br/>Limited columns]
         R3[trial_role<br/>Sample data only]
     end
-    
+
     T1 --> R1
     T2 --> R2
     T3 --> R3
@@ -316,11 +316,11 @@ flowchart LR
     subgraph Context["Session Context"]
         SET["SET app.tenant_id = 'acme'"]
     end
-    
+
     subgraph RLS["RLS Policy"]
         P["tenant_id = current_setting('app.tenant_id')"]
     end
-    
+
     Context --> RLS
 ```
 

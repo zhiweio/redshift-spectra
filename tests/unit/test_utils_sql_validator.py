@@ -14,7 +14,6 @@ import pytest
 from spectra.utils.sql_validator import (
     SQLSecurityLevel,
     SQLValidationError,
-    SQLValidationResult,
     SQLValidator,
 )
 
@@ -69,8 +68,8 @@ class TestSQLValidator:
     def test_validate_select_with_join(self, validator: SQLValidator) -> None:
         """Test SELECT with JOIN."""
         sql = """
-            SELECT a.id, b.name 
-            FROM table_a a 
+            SELECT a.id, b.name
+            FROM table_a a
             INNER JOIN table_b b ON a.id = b.a_id
         """
         result = validator.validate(sql)
@@ -79,7 +78,7 @@ class TestSQLValidator:
     def test_validate_select_with_subquery(self, validator: SQLValidator) -> None:
         """Test SELECT with subquery."""
         sql = """
-            SELECT * FROM orders 
+            SELECT * FROM orders
             WHERE customer_id IN (SELECT id FROM customers WHERE active = true)
         """
         result = validator.validate(sql)
@@ -308,8 +307,8 @@ class TestSQLValidator:
         """Test that CASE expressions are allowed."""
         result = validator.validate(
             """
-            SELECT 
-                CASE 
+            SELECT
+                CASE
                     WHEN status = 'active' THEN 'Active'
                     ELSE 'Inactive'
                 END as status_text
@@ -396,7 +395,10 @@ class TestSQLValidator:
             "QUERY_TOO_COMPLEX",
         ]
 
-    def test_permissive_mode_allows_union(self, permissive_validator: SQLValidator) -> None:
+    def test_permissive_mode_allows_union(
+        self,
+        permissive_validator: SQLValidator,
+    ) -> None:
         """Test that permissive mode with allow_union allows UNION."""
         # Create a validator that explicitly allows unions and disables injection checks
         validator = SQLValidator(
@@ -533,7 +535,7 @@ class TestInjectLimit:
         from spectra.utils.sql_validator import inject_limit
 
         sql = "SELECT * FROM users;"
-        new_sql, original_limit = inject_limit(sql, max_rows=1000)
+        new_sql, _original_limit = inject_limit(sql, max_rows=1000)
 
         assert new_sql == "SELECT * FROM users LIMIT 1001"
         assert not new_sql.endswith(";")

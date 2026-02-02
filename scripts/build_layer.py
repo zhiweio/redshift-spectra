@@ -2,17 +2,17 @@
 """
 Lambda Layer Builder Script
 
-This script builds Lambda layers with proper architecture compatibility.
-It supports building layers locally or using Docker for Amazon Linux 2 compatibility.
+This script builds Lambda layers with proper architecture compatibility
+using Docker with Amazon Linux 2 to ensure Lambda runtime compatibility.
 
 Features:
 - Generates requirements.txt from pyproject.toml using uv
-- Supports local or Docker-based builds
+- Uses Docker for Amazon Linux 2 compatibility
 - Optimizes layer size by removing unnecessary files
 - Validates layer size constraints
 
 Usage:
-    python scripts/build_layer.py [--docker] [--output dist/lambda/layer.zip]
+    python scripts/build_layer.py [--output dist/lambda/layer.zip]
 """
 
 import argparse
@@ -27,22 +27,6 @@ from pathlib import Path
 # AWS Lambda Layer constraints
 MAX_LAYER_SIZE_ZIPPED = 50 * 1024 * 1024  # 50 MB
 MAX_LAYER_SIZE_UNZIPPED = 250 * 1024 * 1024  # 250 MB
-
-# Files and directories to exclude from layer
-EXCLUDE_PATTERNS = [
-    "__pycache__",
-    "*.pyc",
-    "*.pyo",
-    "*.dist-info",
-    "*.egg-info",
-    "tests",
-    "test",
-    "docs",
-    "examples",
-    "*.md",
-    "*.txt",
-    "*.rst",
-]
 
 
 def run_command(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProcess:
@@ -68,34 +52,6 @@ def generate_requirements(project_root: Path) -> Path:
     requirements_path.write_text(result.stdout)
     print(f"Generated: {requirements_path}")
     return requirements_path
-
-
-def build_layer_local(requirements_path: Path, output_dir: Path) -> None:
-    """Build layer locally using pip."""
-    python_dir = output_dir / "python"
-    python_dir.mkdir(parents=True, exist_ok=True)
-
-    print("Installing dependencies locally...")
-    run_command(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--platform",
-            "manylinux2014_x86_64",
-            "--implementation",
-            "cp",
-            "--python-version",
-            "3.11",
-            "--only-binary=:all:",
-            "--target",
-            str(python_dir),
-            "-r",
-            str(requirements_path),
-            "--quiet",
-        ]
-    )
 
 
 def build_layer_docker(requirements_path: Path, output_dir: Path) -> None:
@@ -208,12 +164,7 @@ def validate_layer(zip_path: Path) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build Lambda layer with dependencies from pyproject.toml"
-    )
-    parser.add_argument(
-        "--docker",
-        action="store_true",
-        help="Use Docker to build for Amazon Linux 2 compatibility",
+        description="Build Lambda layer with dependencies from pyproject.toml using Docker"
     )
     parser.add_argument(
         "--output",
@@ -234,7 +185,7 @@ def main() -> None:
 
     print(f"Project root: {project_root}")
     print(f"Output: {args.output}")
-    print(f"Build method: {'Docker' if args.docker else 'Local'}")
+    print("Build method: Docker (Amazon Linux 2)")
     print("-" * 50)
 
     # Generate requirements.txt
@@ -245,11 +196,8 @@ def main() -> None:
         build_dir = Path(tmpdir) / "layer"
         build_dir.mkdir()
 
-        # Build layer
-        if args.docker:
-            build_layer_docker(requirements_path, build_dir)
-        else:
-            build_layer_local(requirements_path, build_dir)
+        # Build layer using Docker
+        build_layer_docker(requirements_path, build_dir)
 
         # Optimize layer
         optimize_layer(build_dir)

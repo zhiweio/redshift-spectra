@@ -11,34 +11,34 @@ flowchart TB
         WORKER[Worker]
         AUTH[Authorizer]
     end
-    
+
     subgraph CloudWatch["CloudWatch"]
         LOGS[Log Groups]
         METRICS[Metrics]
         ALARMS[Alarms]
         DASH[Dashboard]
     end
-    
+
     subgraph XRay["X-Ray"]
         TRACES[Traces]
         MAP[Service Map]
     end
-    
+
     subgraph Alerts["Alerting"]
         SNS[SNS Topic]
         EMAIL[Email]
         SLACK[Slack]
     end
-    
+
     Lambdas -->|Logs| LOGS
     Lambdas -->|Metrics| METRICS
     Lambdas -->|Traces| XRay
-    
+
     METRICS --> ALARMS
     ALARMS --> SNS
     SNS --> EMAIL
     SNS --> SLACK
-    
+
     LOGS --> DASH
     METRICS --> DASH
 ```
@@ -180,7 +180,7 @@ resource "aws_cloudwatch_metric_alarm" "api_errors" {
   statistic           = "Sum"
   threshold           = 5
   alarm_actions       = [aws_sns_topic.alerts.arn]
-  
+
   dimensions = {
     FunctionName = "spectra-api-handler"
   }
@@ -237,13 +237,13 @@ graph TB
             W2[Latency P50/P99]
             W3[Error Rate]
         end
-        
+
         subgraph Row2["Query Metrics"]
             W4[Queries by Status]
             W5[Query Duration]
             W6[Result Size]
         end
-        
+
         subgraph Row3["System Health"]
             W7[Concurrent Executions]
             W8[DynamoDB Capacity]
@@ -275,7 +275,7 @@ Use AWS Chatbot or a Lambda function for Slack notifications:
 ```python
 def notify_slack(event, context):
     message = json.loads(event['Records'][0]['Sns']['Message'])
-    
+
     slack_message = {
         "text": f"🚨 Alert: {message['AlarmName']}",
         "attachments": [{
@@ -286,28 +286,28 @@ def notify_slack(event, context):
             ]
         }]
     }
-    
+
     requests.post(SLACK_WEBHOOK_URL, json=slack_message)
 ```
 
 ## Best Practices
 
 !!! tip "Set Up Alarms First"
-    
+
     Configure alarms before going to production. Don't wait for incidents.
 
 !!! tip "Use Log Insights"
-    
+
     CloudWatch Log Insights is powerful for ad-hoc analysis. Learn the query syntax.
 
 !!! tip "Monitor by Tenant"
-    
+
     Use dimensions to track per-tenant metrics. Identify noisy neighbors.
 
 !!! warning "Log Retention"
-    
+
     Set appropriate retention periods. Default is forever, which can be expensive.
-    
+
     ```hcl
     resource "aws_cloudwatch_log_group" "api" {
       retention_in_days = 30

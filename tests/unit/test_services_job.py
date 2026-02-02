@@ -3,20 +3,19 @@
 Tests for the JobService class that manages job state in DynamoDB.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
-from spectra.models.job import Job, JobError, JobResult, JobStatus
+from spectra.models.job import JobError, JobResult, JobStatus
 from spectra.services.job import (
     DuplicateJobError,
     JobNotFoundError,
     JobService,
 )
-
 
 # =============================================================================
 # JobService Tests

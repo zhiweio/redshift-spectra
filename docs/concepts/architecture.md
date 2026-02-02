@@ -68,7 +68,7 @@ flowchart TB
     CONTEXT --> BULK
     CONTEXT --> RESULT
     CONTEXT --> STATUS
-    
+
     QUERY --> DDB
     QUERY --> RS
     BULK --> DDB
@@ -77,11 +77,11 @@ flowchart TB
     RESULT --> DDB
     RESULT --> S3
     STATUS --> DDB
-    
+
     QUERY --> CACHE
     CACHE --> DDB
     RS --> SM
-    
+
     QUERY --> CW
     BULK --> CW
     QUERY --> XRAY
@@ -161,13 +161,13 @@ flowchart LR
         REPORT[Reports]
         ADHOC[Ad-hoc Queries]
     end
-    
+
     subgraph Batch["Batch Workloads"]
         ETL[ETL Jobs]
         EXPORT[Data Exports]
         IMPORT[Bulk Imports]
     end
-    
+
     Interactive --> QUERY[Query API<br/>Sync, <5 min]
     Batch --> BULK[Bulk API<br/>Async, <24h]
 ```
@@ -250,17 +250,17 @@ sequenceDiagram
     GW->>A: Authorize
     A-->>GW: Allow + Context
     GW->>H: Invoke
-    
+
     H->>H: Validate SQL
     H->>H: Inject LIMIT
     H->>D: Create Job
     H->>RS: Execute Statement
-    
+
     loop Poll (max 5 min)
         H->>RS: Describe Statement
         RS-->>H: Status
     end
-    
+
     H->>RS: Get Results
     RS-->>H: Data
     H->>D: Update Job
@@ -290,18 +290,18 @@ sequenceDiagram
     C->>H: POST /bulk/jobs
     H->>D: Create Job (Open)
     H-->>C: Job ID + Upload URL
-    
+
     C->>S: Upload Data
     C->>H: PATCH /bulk/jobs/{id}
     H->>D: Update (UploadComplete)
-    
+
     Note over H,RS: Background Processing
-    
+
     H->>RS: Execute Query/COPY
     RS-->>H: Results
     H->>S: Write Results
     H->>D: Update (Complete)
-    
+
     C->>H: GET /bulk/jobs/{id}
     H-->>C: Status + Download URL
 ```
@@ -324,17 +324,17 @@ flowchart LR
         R2[Request 2]
         R3[Request N]
     end
-    
+
     subgraph Lambda["Lambda Auto-Scaling"]
         L1[Instance 1]
         L2[Instance 2]
         L3[Instance N]
     end
-    
+
     subgraph Redshift["Redshift Concurrency"]
         RS[(Redshift<br/>WLM Queues)]
     end
-    
+
     Requests --> Lambda
     Lambda --> RS
 ```
@@ -368,7 +368,7 @@ flowchart TB
         S3[(S3)]
         RS[(Redshift)]
     end
-    
+
     CLIENTS[Clients] --> APIGW
 ```
 
@@ -384,13 +384,13 @@ flowchart TB
         RS1[(Redshift)]
         DDB1[(DynamoDB)]
     end
-    
+
     subgraph Secondary["Secondary Region"]
         APIGW2[API Gateway]
         LAMBDA2[Lambda]
         DDB2[(DynamoDB)]
     end
-    
+
     R53[Route 53] --> APIGW1
     R53 --> APIGW2
     DDB1 <-.->|Global Tables| DDB2

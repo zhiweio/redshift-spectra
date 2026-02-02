@@ -263,8 +263,8 @@ resource "aws_api_gateway_method" "bulk_batches_put" {
   authorizer_id = var.enable_lambda_authorizer ? aws_api_gateway_authorizer.lambda[0].id : null
 
   request_parameters = {
-    "method.request.path.jobId"         = true
-    "method.request.header.X-Tenant-Id" = true
+    "method.request.path.jobId"          = true
+    "method.request.header.X-Tenant-Id"  = true
     "method.request.header.Content-Type" = true
   }
 }

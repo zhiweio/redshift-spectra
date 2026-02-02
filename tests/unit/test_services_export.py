@@ -4,15 +4,13 @@ Tests for the ExportService class that handles S3 export operations.
 """
 
 import json
-from datetime import UTC, datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
 from spectra.services.export import ExportError, ExportService
-
 
 # =============================================================================
 # ExportService Tests
@@ -238,7 +236,7 @@ class TestExportServiceEdgeCases:
         """Test writing empty JSON results."""
         mock_s3_client.put_object.return_value = {}
 
-        s3_uri = export_service.write_json_results(
+        export_service.write_json_results(
             job_id="job-123",
             tenant_id="tenant-456",
             data=[],

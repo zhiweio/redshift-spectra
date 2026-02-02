@@ -1,5 +1,8 @@
 """Job status Lambda handler."""
 
+import base64
+import contextlib
+import json
 from typing import Any
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
@@ -122,18 +125,35 @@ def list_jobs() -> Response:
     # Parse query parameters
     params = app.current_event.query_string_parameters or {}
     limit = min(int(params.get("limit", "50")), 100)
-    status_filter = params.get("status")
+    status_filter_str = params.get("status")
     cursor = params.get("cursor")
+
+    # Convert status string to enum if provided
+    status_filter: JobStatus | None = None
+    if status_filter_str:
+        with contextlib.suppress(ValueError):
+            status_filter = JobStatus(status_filter_str)
+
+    # Decode cursor to last_evaluated_key if provided
+    last_evaluated_key: dict[str, Any] | None = None
+    if cursor:
+        with contextlib.suppress(ValueError, json.JSONDecodeError):
+            last_evaluated_key = json.loads(base64.b64decode(cursor).decode())
 
     job_service = JobService()
 
     # List jobs
-    jobs, next_cursor = job_service.list_jobs(
+    jobs, next_key = job_service.list_jobs(
         tenant_id=tenant_ctx.tenant_id,
         limit=limit,
         status=status_filter,
-        cursor=cursor,
+        last_evaluated_key=last_evaluated_key,
     )
+
+    # Encode next_key to cursor
+    next_cursor: str | None = None
+    if next_key:
+        next_cursor = base64.b64encode(json.dumps(next_key).encode()).decode()
 
     return api_response(
         200,

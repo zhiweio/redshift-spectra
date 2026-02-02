@@ -3,7 +3,6 @@
 Tests for the RedshiftService class that handles query execution via Data API.
 """
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +16,6 @@ from spectra.services.redshift import (
     SessionCreationError,
     StatementNotFoundError,
 )
-
 
 # =============================================================================
 # RedshiftService Tests

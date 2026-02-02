@@ -8,7 +8,7 @@
 
 resource "aws_iam_role" "authorizer" {
   name = "${var.name_prefix}-authorizer-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -21,14 +21,14 @@ resource "aws_iam_role" "authorizer" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
 resource "aws_iam_role_policy" "authorizer_secrets" {
   name = "${var.name_prefix}-authorizer-secrets"
   role = aws_iam_role.authorizer.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -55,7 +55,7 @@ resource "aws_iam_role_policy_attachment" "authorizer_basic" {
 
 resource "aws_iam_role" "api_handler" {
   name = "${var.name_prefix}-api-handler-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -68,14 +68,14 @@ resource "aws_iam_role" "api_handler" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
 resource "aws_iam_role_policy" "api_handler_redshift" {
   name = "${var.name_prefix}-api-redshift"
   role = aws_iam_role.api_handler.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -110,7 +110,7 @@ resource "aws_iam_role_policy" "api_handler_redshift" {
 resource "aws_iam_role_policy" "api_handler_dynamodb" {
   name = "${var.name_prefix}-api-dynamodb"
   role = aws_iam_role.api_handler.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -136,7 +136,7 @@ resource "aws_iam_role_policy" "api_handler_dynamodb" {
 resource "aws_iam_role_policy" "api_handler_s3" {
   name = "${var.name_prefix}-api-s3"
   role = aws_iam_role.api_handler.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -160,7 +160,7 @@ resource "aws_iam_role_policy" "api_handler_s3" {
 resource "aws_iam_role_policy" "api_handler_secrets" {
   name = "${var.name_prefix}-api-secrets"
   role = aws_iam_role.api_handler.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -193,7 +193,7 @@ resource "aws_iam_role_policy_attachment" "api_handler_vpc" {
 
 resource "aws_iam_role" "worker" {
   name = "${var.name_prefix}-worker-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -206,14 +206,14 @@ resource "aws_iam_role" "worker" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
 resource "aws_iam_role_policy" "worker_redshift" {
   name = "${var.name_prefix}-worker-redshift"
   role = aws_iam_role.worker.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -248,7 +248,7 @@ resource "aws_iam_role_policy" "worker_redshift" {
 resource "aws_iam_role_policy" "worker_dynamodb" {
   name = "${var.name_prefix}-worker-dynamodb"
   role = aws_iam_role.worker.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -274,7 +274,7 @@ resource "aws_iam_role_policy" "worker_dynamodb" {
 resource "aws_iam_role_policy" "worker_s3" {
   name = "${var.name_prefix}-worker-s3"
   role = aws_iam_role.worker.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -315,7 +315,7 @@ resource "aws_iam_role_policy" "api_handler_kms" {
   count = var.kms_key_arn != null ? 1 : 0
   name  = "${var.name_prefix}-api-kms"
   role  = aws_iam_role.api_handler.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -335,7 +335,7 @@ resource "aws_iam_role_policy" "worker_kms" {
   count = var.kms_key_arn != null ? 1 : 0
   name  = "${var.name_prefix}-worker-kms"
   role  = aws_iam_role.worker.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -357,7 +357,7 @@ resource "aws_iam_role_policy" "worker_kms" {
 
 resource "aws_iam_role" "redshift_s3" {
   name = "${var.name_prefix}-redshift-s3-role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -370,14 +370,14 @@ resource "aws_iam_role" "redshift_s3" {
       }
     ]
   })
-  
+
   tags = var.tags
 }
 
 resource "aws_iam_role_policy" "redshift_s3_access" {
   name = "${var.name_prefix}-redshift-s3-access"
   role = aws_iam_role.redshift_s3.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

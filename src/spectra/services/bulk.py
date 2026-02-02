@@ -25,6 +25,7 @@ from spectra.models.bulk import (
     BulkJobInfo,
     BulkJobState,
     BulkOperation,
+    ColumnMapping,
     CompressionType,
     DataFormat,
     LineEnding,
@@ -156,7 +157,7 @@ class BulkJobService:
         query: str | None = None,
         object_name: str | None = None,
         external_id_field: str | None = None,
-        column_mappings: list[dict] | None = None,
+        column_mappings: list[ColumnMapping] | None = None,
         content_type: DataFormat = DataFormat.CSV,
         compression: CompressionType = CompressionType.GZIP,
         line_ending: LineEnding = LineEnding.LF,
@@ -325,7 +326,7 @@ class BulkJobService:
             Tuple of (jobs list, next_token)
         """
         try:
-            query_params = {
+            query_params: dict[str, Any] = {
                 "IndexName": "tenant-state-index",
                 "KeyConditionExpression": Key("tenant_id").eq(tenant_id),
                 "Limit": min(limit, 1000),
@@ -334,7 +335,9 @@ class BulkJobService:
 
             # Add state filter if provided
             if state:
-                query_params["KeyConditionExpression"] &= Key("state").eq(state.value)
+                query_params["KeyConditionExpression"] = query_params[
+                    "KeyConditionExpression"
+                ] & Key("state").eq(state.value)
 
             # Add operation filter if provided
             if operation:
@@ -719,3 +722,167 @@ class BulkJobService:
             error_message=item.get("error_message"),
             job_type="V2Query" if item["operation"] == "query" else "V2Ingest",
         )
+
+    @tracer.capture_method
+    def close_job(self, job_id: str, tenant_id: str) -> BulkJobInfo:
+        """Close a job and mark it ready for processing.
+
+        Transitions job from Open to UploadComplete state.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+
+        Returns:
+            Updated job info
+        """
+        return self.update_job_state(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            new_state=BulkJobState.UPLOAD_COMPLETE,
+        )
+
+    @tracer.capture_method
+    def abort_job(self, job_id: str, tenant_id: str) -> BulkJobInfo:
+        """Abort a job.
+
+        Can abort from any non-terminal state.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+
+        Returns:
+            Updated job info
+        """
+        return self.update_job_state(
+            job_id=job_id,
+            tenant_id=tenant_id,
+            new_state=BulkJobState.ABORTED,
+        )
+
+    @tracer.capture_method
+    def delete_job(self, job_id: str, tenant_id: str) -> None:
+        """Delete a completed job.
+
+        Only jobs in terminal states can be deleted.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+
+        Raises:
+            BulkJobNotFoundError: If job not found
+            BulkJobStateError: If job is not in terminal state
+        """
+        job = self.get_job(job_id, tenant_id)
+
+        if not job.state.is_terminal:
+            raise BulkJobStateError(job_id, job.state.value, "deleted")
+
+        try:
+            self.table.delete_item(
+                Key={"job_id": job_id},
+                ConditionExpression=Attr("tenant_id").eq(tenant_id),
+            )
+            logger.info("Bulk job deleted", extra={"job_id": job_id})
+        except ClientError as e:
+            logger.error("Failed to delete job", extra={"job_id": job_id, "error": str(e)})
+            raise
+
+    @tracer.capture_method
+    def add_batch(
+        self,
+        job_id: str,
+        tenant_id: str,
+        data: str | bytes,
+        content_type: DataFormat,
+    ) -> dict[str, Any]:
+        """Add a batch of data to a job.
+
+        Uploads data to S3 for processing.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+            data: Data to upload
+            content_type: Format of the data
+
+        Returns:
+            Batch info with upload details
+        """
+        job = self.get_job(job_id, tenant_id)
+
+        if job.state != BulkJobState.OPEN:
+            raise BulkJobStateError(job_id, job.state.value, "add_batch")
+
+        batch_id = str(uuid.uuid4())
+        s3_key = f"bulk/{tenant_id}/{job_id}/batches/{batch_id}"
+
+        # Upload to S3
+        self.s3_client.put_object(
+            Bucket=self.settings.s3_bucket_name,
+            Key=s3_key,
+            Body=data if isinstance(data, bytes) else data.encode(),
+            ContentType=self._get_content_type_header(content_type, CompressionType.NONE),
+        )
+
+        logger.info("Batch uploaded", extra={"job_id": job_id, "batch_id": batch_id})
+
+        return {
+            "id": batch_id,
+            "job_id": job_id,
+            "state": "Queued",
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+
+    @tracer.capture_method
+    def get_job_results(self, job_id: str, tenant_id: str) -> dict[str, Any]:
+        """Get results for a completed job.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+
+        Returns:
+            Job results including download URLs
+        """
+        job = self.get_job(job_id, tenant_id)
+
+        if not job.state.is_terminal:
+            raise BulkJobStateError(job_id, job.state.value, "get_results")
+
+        # Generate presigned URL for results
+        results_key = f"bulk/{tenant_id}/{job_id}/results/data"
+        failed_key = f"bulk/{tenant_id}/{job_id}/results/failed"
+
+        result: dict[str, Any] = {
+            "job_id": job_id,
+            "state": job.state.value,
+            "number_records_processed": job.number_records_processed,
+            "number_records_failed": job.number_records_failed,
+        }
+
+        # Check if results exist and generate download URL
+        try:
+            self.s3_client.head_object(Bucket=self.settings.s3_bucket_name, Key=results_key)
+            result["successful_results_url"] = self.s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.settings.s3_bucket_name, "Key": results_key},
+                ExpiresIn=3600,
+            )
+        except ClientError:
+            pass  # No results file
+
+        # Check if failed records exist
+        try:
+            self.s3_client.head_object(Bucket=self.settings.s3_bucket_name, Key=failed_key)
+            result["failed_results_url"] = self.s3_client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self.settings.s3_bucket_name, "Key": failed_key},
+                ExpiresIn=3600,
+            )
+        except ClientError:
+            pass  # No failed records file
+
+        return result

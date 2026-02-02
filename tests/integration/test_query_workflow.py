@@ -8,14 +8,14 @@ Note: Query API is now synchronous-only. Async execution should use Bulk API.
 
 import json
 import os
+from collections.abc import Generator
 from datetime import UTC, datetime
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
 from moto import mock_aws
-
 
 # =============================================================================
 # Integration Test Fixtures
@@ -145,8 +145,8 @@ class TestQueryWorkflowIntegration:
         self, mock_aws_services: dict[str, Any], mock_redshift_client: MagicMock
     ) -> None:
         """Test that submitting a query creates a job record."""
-        from spectra.services.job import JobService
         from spectra.models.job import JobStatus
+        from spectra.services.job import JobService
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -171,8 +171,8 @@ class TestQueryWorkflowIntegration:
         self, mock_aws_services: dict[str, Any], mock_redshift_client: MagicMock
     ) -> None:
         """Test that job status can be updated through the workflow."""
+        from spectra.models.job import JobResult, JobStatus
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus, JobResult
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -212,7 +212,7 @@ class TestQueryWorkflowIntegration:
         self, mock_aws_services: dict[str, Any], mock_redshift_client: MagicMock
     ) -> None:
         """Test that jobs are isolated by tenant."""
-        from spectra.services.job import JobService, JobNotFoundError
+        from spectra.services.job import JobNotFoundError, JobService
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -451,9 +451,8 @@ class TestEndToEndWorkflow:
         Note: This test now verifies the sync execution model.
         For truly async operations, use the Bulk API.
         """
+        from spectra.models.job import JobResult, JobStatus
         from spectra.services.job import JobService
-        from spectra.services.export import ExportService
-        from spectra.models.job import JobStatus, JobResult
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -502,8 +501,8 @@ class TestEndToEndWorkflow:
         self, mock_aws_services: dict[str, Any], mock_redshift_client: MagicMock
     ) -> None:
         """Test handling of failed queries."""
+        from spectra.models.job import JobError, JobStatus
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus, JobError
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -563,7 +562,6 @@ class TestSyncQueryExecution:
     ) -> None:
         """Test synchronous query with LIMIT injection."""
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus, JobResult
         from spectra.utils.sql_validator import inject_limit
 
         with patch("boto3.client", return_value=mock_redshift_client):
@@ -620,10 +618,9 @@ class TestSyncQueryExecution:
     ) -> None:
         """Test truncation detection with LIMIT+1 strategy."""
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus
 
         with patch("boto3.client", return_value=mock_redshift_client):
-            job_service = JobService()
+            JobService()  # Initialize service (not used directly)
 
             # Simulate receiving max_rows + 1 records (indicating truncation)
             max_rows = 100
@@ -641,8 +638,8 @@ class TestSyncQueryExecution:
         self, mock_aws_services: dict[str, Any], mock_redshift_client: MagicMock
     ) -> None:
         """Test timeout handling for sync queries."""
-        from spectra.services.job import JobService
         from spectra.models.job import JobStatus
+        from spectra.services.job import JobService
 
         with patch("boto3.client", return_value=mock_redshift_client):
             job_service = JobService()
@@ -762,7 +759,6 @@ class TestQueryJobAudit:
     def test_job_record_created_for_sync_query(self, mock_aws_services: dict[str, Any]) -> None:
         """Test that job record is created for sync queries (audit trail)."""
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus
 
         job_service = JobService()
 
@@ -783,8 +779,8 @@ class TestQueryJobAudit:
 
     def test_job_status_progression_for_sync_query(self, mock_aws_services: dict[str, Any]) -> None:
         """Test job status progression for sync query."""
+        from spectra.models.job import JobResult, JobStatus
         from spectra.services.job import JobService
-        from spectra.models.job import JobStatus, JobResult
 
         job_service = JobService()
 

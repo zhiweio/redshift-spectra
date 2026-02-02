@@ -339,7 +339,12 @@ class TestQueryHandler:
 class TestQueryHandlerIntegration:
     """Integration tests for Query Lambda handler with mocked AWS services."""
 
-    def test_query_handler_full_flow(self, mock_dynamodb, mock_context, monkeypatch):
+    def test_query_handler_full_flow(
+        self,
+        mock_dynamodb,
+        mock_context,
+        monkeypatch,
+    ):
         """Test full synchronous query execution flow."""
 
         # Need to reimport handler after setting env var
@@ -818,7 +823,7 @@ class TestQueryHandlerEdgeCases:
             mock_ctx.return_value = ctx
 
             # Should accept the request (validation passes at model level)
-            result = app.resolve(event, mock_context)
+            app.resolve(event, mock_context)
             # Will fail at validation but not because of timeout
             # The test verifies 300 is accepted as a valid timeout
 
@@ -974,7 +979,7 @@ class TestQueryHandlerMetrics:
                                     "total_rows": 4,
                                 }
 
-                                with patch("spectra.handlers.query.metrics") as mock_metrics:
+                                with patch("spectra.handlers.query.metrics"):
                                     result = app.resolve(event, mock_context)
 
                                     assert result["statusCode"] == 200

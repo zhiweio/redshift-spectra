@@ -58,7 +58,7 @@ upgrade:  ## Upgrade all dependencies
 
 clean:  ## Clean build artifacts and caches
 	@echo -e "$(YELLOW)Cleaning build artifacts...$(NC)"
-	rm -rf dist/ build/ *.egg-info .pytest_cache .mypy_cache .ruff_cache
+	rm -rf dist/ build/ *.egg-info .pytest_cache .ty_cache .ruff_cache
 	rm -rf .coverage htmlcov/ coverage.xml
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
@@ -83,9 +83,9 @@ format-check:  ## Check code formatting
 	@echo -e "$(BLUE)Checking code format...$(NC)"
 	uv run ruff format --check $(SRC_DIR) $(TESTS_DIR)
 
-type-check:  ## Run type checking with mypy
+type-check:  ## Run type checking with ty
 	@echo -e "$(BLUE)Running type checks...$(NC)"
-	uv run mypy $(SRC_DIR)
+	uv run ty check $(SRC_DIR)
 
 check-all: lint format-check type-check  ## Run all code quality checks
 
@@ -133,83 +133,35 @@ requirements-dev.txt: pyproject.toml  ## Generate dev requirements.txt from pypr
 	@echo -e "$(GREEN)Generated requirements-dev.txt$(NC)"
 
 # =============================================================================
-# Lambda Layer (Shared Dependencies)
+# Lambda Layer (Shared Dependencies) - Uses Docker for Linux compatibility
 # =============================================================================
 
-package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
-	@echo -e "$(BLUE)Creating Lambda layer with shared dependencies...$(NC)"
-	@rm -rf $(LAMBDA_DIR)/layer
-	@mkdir -p $(LAMBDA_DIR)/layer/python
-	
-	# Install dependencies for Amazon Linux 2 (Lambda runtime)
-	@echo -e "$(GREEN)Installing dependencies for Lambda runtime...$(NC)"
-	pip install \
-		--platform manylinux2014_x86_64 \
-		--implementation cp \
-		--python-version 3.11 \
-		--only-binary=:all: \
-		--target $(LAMBDA_DIR)/layer/python \
-		-r requirements.txt \
-		--quiet || pip install -r requirements.txt -t $(LAMBDA_DIR)/layer/python --quiet
-	
-	# Remove unnecessary files to reduce layer size
-	@echo -e "$(GREEN)Optimizing layer size...$(NC)"
-	@find $(LAMBDA_DIR)/layer -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type f -name "*.pyc" -delete 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
-	
-	# Create layer zip
-	cd $(LAMBDA_DIR)/layer && zip -r ../layer.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
-	
-	# Show layer size
-	@echo -e "$(GREEN)Lambda layer created: $(LAMBDA_DIR)/layer.zip$(NC)"
-	@ls -lh $(LAMBDA_DIR)/layer.zip | awk '{print "Layer size: " $$5}'
+package-layer: requirements.txt  ## Create Lambda layer with shared dependencies (Docker)
+	@echo -e "$(BLUE)Creating Lambda layer using Docker...$(NC)"
+	./scripts/package_lambda.sh --layer --clean
 
 # =============================================================================
 # Lambda Function Packages (Code Only - No Dependencies)
 # =============================================================================
 
 package-lambda: package-layer  ## Package Lambda functions (code only, uses layer for deps)
-	@echo -e "$(BLUE)Packaging Lambda functions (code only)...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)
-	
-	# Clean previous builds
-	@rm -rf $(LAMBDA_DIR)/api-handler $(LAMBDA_DIR)/worker $(LAMBDA_DIR)/authorizer
-	
-	# Create API handler package (code only)
-	@echo -e "$(GREEN)Creating API handler package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/api-handler
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/api-handler/spectra
-	cd $(LAMBDA_DIR)/api-handler && zip -r ../api-handler.zip . -x "*.pyc" -x "__pycache__/*"
-	
-	# Create Worker package (code only)
-	@echo -e "$(GREEN)Creating worker package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/worker
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/worker/spectra
-	cd $(LAMBDA_DIR)/worker && zip -r ../worker.zip . -x "*.pyc" -x "__pycache__/*"
-	
-	# Create Authorizer package (code only)
-	@echo -e "$(GREEN)Creating authorizer package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/authorizer
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/authorizer/spectra
-	cd $(LAMBDA_DIR)/authorizer && zip -r ../authorizer.zip . -x "*.pyc" -x "__pycache__/*"
-	
-	# Show package sizes
-	@echo -e "$(GREEN)Lambda packages created in $(LAMBDA_DIR)/$(NC)"
-	@echo "Package sizes:"
-	@ls -lh $(LAMBDA_DIR)/*.zip | awk '{print "  " $$9 ": " $$5}'
+	@echo -e "$(GREEN)Lambda packages created by package_lambda.sh$(NC)"
+	@ls -lh $(LAMBDA_DIR)/*.zip 2>/dev/null | awk '{print "  " $$9 ": " $$5}'
 
-package-all: package-layer package-lambda  ## Create all Lambda packages (layer + functions)
+package-all: package-layer  ## Create all Lambda packages (layer + functions)
 	@echo -e "$(GREEN)All Lambda packages created!$(NC)"
 	@echo ""
 	@echo "Artifacts:"
-	@echo "  - Layer:      $(LAMBDA_DIR)/layer.zip (shared dependencies)"
-	@echo "  - API:        $(LAMBDA_DIR)/api-handler.zip (code only)"
-	@echo "  - Worker:     $(LAMBDA_DIR)/worker.zip (code only)"
-	@echo "  - Authorizer: $(LAMBDA_DIR)/authorizer.zip (code only)"
+	@ls -lh $(LAMBDA_DIR)/*.zip 2>/dev/null | awk '{print "  " $$9 ": " $$5}'
+
+# =============================================================================
+# Fat Lambda Packages for LocalStack (dependencies bundled - no layer needed)
+# Uses Docker to ensure Linux x86_64 compatibility
+# =============================================================================
+
+package-lambda-fat: requirements.txt  ## Create fat Lambda packages with bundled dependencies (for LocalStack)
+	@echo -e "$(BLUE)Creating fat Lambda packages using Docker...$(NC)"
+	./scripts/package_lambda.sh --fat --clean
 
 # Validate layer size (AWS limit: 250MB unzipped, 50MB zipped per layer)
 validate-layer:  ## Validate Lambda layer size constraints
@@ -222,79 +174,97 @@ validate-layer:  ## Validate Lambda layer size constraints
 		echo -e "$(GREEN)Layer size OK: $$LAYER_SIZE bytes (limit: 52428800)$(NC)"; \
 	fi
 
-# Build layer using Python script (supports Docker for production)
-package-layer-docker:  ## Create Lambda layer using Docker (Amazon Linux 2 compatible)
-	@echo -e "$(BLUE)Creating Lambda layer with Docker...$(NC)"
-	uv run python scripts/build_layer.py --docker --output $(LAMBDA_DIR)/layer.zip
-
-package-layer-script: requirements.txt  ## Create Lambda layer using Python script
-	@echo -e "$(BLUE)Creating Lambda layer with script...$(NC)"
-	uv run python scripts/build_layer.py --output $(LAMBDA_DIR)/layer.zip
-
 # =============================================================================
 # Terragrunt Infrastructure
 # =============================================================================
 
 # Terragrunt settings
-TG_DIR := terragrunt
+TG_DIR := $(CURDIR)/terragrunt
 TG_DEV_DIR := $(TG_DIR)/environments/dev/us-east-1
 TG_PROD_DIR := $(TG_DIR)/environments/prod/us-east-1
 
+# Terraform/Terragrunt formatting
+tf-fmt:  ## Format all Terraform files
+	@echo -e "$(BLUE)Formatting Terraform files...$(NC)"
+	terraform fmt -recursive terraform/
+
+tf-fmt-check:  ## Check Terraform file formatting (no changes)
+	@echo -e "$(BLUE)Checking Terraform formatting...$(NC)"
+	terraform fmt -recursive -check terraform/
+
+tg-fmt:  ## Format all Terragrunt HCL files
+	@echo -e "$(BLUE)Formatting Terragrunt HCL files...$(NC)"
+	cd $(TG_DIR) && terragrunt hcl fmt
+
+tg-fmt-check:  ## Check Terragrunt HCL formatting (no changes)
+	@echo -e "$(BLUE)Checking Terragrunt HCL formatting...$(NC)"
+	cd $(TG_DIR) && terragrunt hcl fmt --check
+
+iac-fmt:  ## Format all Terraform and Terragrunt files
+	@echo -e "$(BLUE)Formatting all IaC files...$(NC)"
+	$(MAKE) tf-fmt
+	$(MAKE) tg-fmt
+
+iac-fmt-check:  ## Check all Terraform and Terragrunt formatting
+	@echo -e "$(BLUE)Checking all IaC formatting...$(NC)"
+	$(MAKE) tf-fmt-check
+	$(MAKE) tg-fmt-check
+
 tg-init-dev:  ## Initialize Terragrunt for dev environment
 	@echo -e "$(BLUE)Initializing Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all init
+	cd $(TG_DEV_DIR) && terragrunt run --all init
 
 tg-init-prod:  ## Initialize Terragrunt for prod environment
 	@echo -e "$(BLUE)Initializing Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all init
+	cd $(TG_PROD_DIR) && terragrunt run --all init
 
 tg-validate-dev:  ## Validate Terragrunt configuration for dev
 	@echo -e "$(BLUE)Validating Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all validate
+	cd $(TG_DEV_DIR) && terragrunt run --all validate
 
 tg-validate-prod:  ## Validate Terragrunt configuration for prod
 	@echo -e "$(BLUE)Validating Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all validate
+	cd $(TG_PROD_DIR) && terragrunt run --all validate
 
 tg-plan-dev:  ## Plan Terragrunt changes for dev
 	@echo -e "$(BLUE)Planning Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all plan
+	cd $(TG_DEV_DIR) && terragrunt run --all plan
 
 tg-plan-prod:  ## Plan Terragrunt changes for prod
 	@echo -e "$(BLUE)Planning Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all plan
+	cd $(TG_PROD_DIR) && terragrunt run --all plan
 
 tg-apply-dev:  ## Apply Terragrunt changes for dev
 	@echo -e "$(YELLOW)Applying Terragrunt (dev)...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all apply
+	cd $(TG_DEV_DIR) && terragrunt run --all apply
 
 tg-apply-prod:  ## Apply Terragrunt changes for prod (requires confirmation)
 	@echo -e "$(YELLOW)Applying Terragrunt (prod)...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all apply
+	cd $(TG_PROD_DIR) && terragrunt run --all apply
 
 tg-destroy-dev:  ## Destroy dev infrastructure (use with caution!)
 	@echo -e "$(RED)Destroying dev infrastructure...$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all destroy
+	cd $(TG_DEV_DIR) && terragrunt run --all destroy
 
 tg-destroy-prod:  ## Destroy prod infrastructure (use with extreme caution!)
 	@echo -e "$(RED)Destroying prod infrastructure...$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all destroy
+	cd $(TG_PROD_DIR) && terragrunt run --all destroy
 
 tg-output-dev:  ## Show Terragrunt outputs for dev
 	@echo -e "$(BLUE)Terragrunt outputs (dev):$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt run-all output
+	cd $(TG_DEV_DIR) && terragrunt run --all output
 
 tg-output-prod:  ## Show Terragrunt outputs for prod
 	@echo -e "$(BLUE)Terragrunt outputs (prod):$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt run-all output
+	cd $(TG_PROD_DIR) && terragrunt run --all output
 
 tg-graph-dev:  ## Show dependency graph for dev
 	@echo -e "$(BLUE)Terragrunt dependency graph (dev):$(NC)"
-	cd $(TG_DEV_DIR) && terragrunt graph-dependencies
+	cd $(TG_DEV_DIR) && terragrunt dag graph
 
 tg-graph-prod:  ## Show dependency graph for prod
 	@echo -e "$(BLUE)Terragrunt dependency graph (prod):$(NC)"
-	cd $(TG_PROD_DIR) && terragrunt graph-dependencies
+	cd $(TG_PROD_DIR) && terragrunt dag graph
 
 # Module-specific commands (dev)
 tg-plan-dynamodb-dev:  ## Plan DynamoDB module for dev
@@ -368,16 +338,122 @@ update-hooks:  ## Update pre-commit hooks
 	uv run pre-commit autoupdate
 
 # =============================================================================
-# Local Development
+# Local Development with LocalStack
 # =============================================================================
 
-local-api:  ## Run local API server (requires SAM CLI)
-	@echo -e "$(BLUE)Starting local API server...$(NC)"
-	sam local start-api --template template.yaml
+# LocalStack settings
+TG_LOCAL_DIR := $(TG_DIR)/environments/local/us-east-1
+TG_LOCAL_CONFIG := $(TG_DIR)/terragrunt-local.hcl
 
-local-invoke:  ## Invoke Lambda function locally
-	@echo -e "$(BLUE)Invoking Lambda locally...$(NC)"
-	sam local invoke ApiHandler --event events/sample-query.json
+localstack-start:  ## Start LocalStack container
+	@echo -e "$(BLUE)Starting LocalStack...$(NC)"
+	docker compose up -d localstack
+	@echo -e "$(GREEN)Waiting for LocalStack to be ready...$(NC)"
+	@for i in $$(seq 1 30); do \
+		if curl -s http://localhost:4566/_localstack/health > /dev/null 2>&1; then \
+			echo -e "$(GREEN)LocalStack is ready!$(NC)"; \
+			break; \
+		fi; \
+		echo -n "."; \
+		sleep 2; \
+	done
+
+localstack-stop:  ## Stop LocalStack container
+	@echo -e "$(BLUE)Stopping LocalStack...$(NC)"
+	docker compose down
+
+localstack-status:  ## Check LocalStack status
+	@echo -e "$(BLUE)LocalStack status:$(NC)"
+	@curl -s http://localhost:4566/_localstack/health | python3 -m json.tool 2>/dev/null || \
+		echo "LocalStack is not running. Start with: make localstack-start"
+
+localstack-logs:  ## Show LocalStack logs
+	docker compose logs -f localstack
+
+localstack-reset:  ## Reset LocalStack (destroy and recreate)
+	@echo -e "$(YELLOW)Resetting LocalStack...$(NC)"
+	docker compose down -v
+	docker compose up -d localstack
+	@$(MAKE) localstack-start
+
+# LocalStack Terragrunt commands
+tg-init-local:  ## Initialize Terragrunt for LocalStack
+	@echo -e "$(BLUE)Initializing Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) init
+
+tg-plan-local:  ## Plan Terragrunt changes for LocalStack
+	@echo -e "$(BLUE)Planning Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) plan
+
+tg-apply-local:  ## Apply Terragrunt changes for LocalStack
+	@echo -e "$(BLUE)Applying Terragrunt (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) --non-interactive apply
+
+tg-destroy-local:  ## Destroy LocalStack infrastructure
+	@echo -e "$(RED)Destroying LocalStack infrastructure...$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) --non-interactive destroy
+
+tg-output-local:  ## Show Terragrunt outputs for LocalStack
+	@echo -e "$(BLUE)Terragrunt outputs (LocalStack):$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt run --all --config $(TG_LOCAL_CONFIG) output
+
+tg-graph-local:  ## Show dependency graph for LocalStack
+	@echo -e "$(BLUE)Terragrunt dependency graph (LocalStack):$(NC)"
+	cd $(TG_LOCAL_DIR) && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		TG_CONFIG=$(TG_LOCAL_CONFIG) terragrunt dag graph
+
+# Module-specific LocalStack commands
+tg-plan-dynamodb-local:  ## Plan DynamoDB module for LocalStack
+	@echo -e "$(BLUE)Planning DynamoDB (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
+
+tg-apply-dynamodb-local:  ## Apply DynamoDB module for LocalStack
+	@echo -e "$(BLUE)Applying DynamoDB (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/dynamodb && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-s3-local:  ## Plan S3 module for LocalStack
+	@echo -e "$(BLUE)Planning S3 (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
+
+tg-apply-s3-local:  ## Apply S3 module for LocalStack
+	@echo -e "$(BLUE)Applying S3 (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/s3 && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-iam-local:  ## Plan IAM module for LocalStack
+	@echo -e "$(BLUE)Planning IAM (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
+
+tg-apply-iam-local:  ## Apply IAM module for LocalStack
+	@echo -e "$(BLUE)Applying IAM (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/iam && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
+
+tg-plan-secrets-local:  ## Plan Secrets module for LocalStack
+	@echo -e "$(BLUE)Planning Secrets (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt plan --config $(TG_LOCAL_CONFIG)
+
+tg-apply-secrets-local:  ## Apply Secrets module for LocalStack
+	@echo -e "$(BLUE)Applying Secrets (LocalStack)...$(NC)"
+	cd $(TG_LOCAL_DIR)/secrets && AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+		terragrunt apply --config $(TG_LOCAL_CONFIG) --auto-approve
+
+# Full local deployment workflow
+deploy-local: localstack-start tg-apply-local  ## Deploy to LocalStack (start + apply)
+	@echo -e "$(GREEN)Deployed to LocalStack!$(NC)"
+	@echo ""
+	@echo "LocalStack endpoint: http://localhost:4566"
+	@echo "Use AWS CLI with: aws --endpoint-url=http://localhost:4566 ..."
 
 # =============================================================================
 # CI/CD Helpers
@@ -393,7 +469,7 @@ ci-lint:  ## Run CI linting
 	uv sync
 	uv run ruff check $(SRC_DIR) $(TESTS_DIR) --output-format=github
 	uv run ruff format --check $(SRC_DIR) $(TESTS_DIR)
-	uv run mypy $(SRC_DIR)
+	uv run ty check $(SRC_DIR)
 
 # =============================================================================
 # Version Management

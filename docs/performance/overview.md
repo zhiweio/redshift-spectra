@@ -12,13 +12,13 @@ flowchart TB
         ASYNC[Async Processing]
         CACHE[Result Caching]
     end
-    
+
     subgraph Impact["Impact"]
         LAT[Lower Latency]
         THRU[Higher Throughput]
         COST[Reduced Costs]
     end
-    
+
     SESSION --> LAT
     CSV --> LAT
     ASYNC --> THRU
@@ -59,7 +59,7 @@ flowchart LR
     SUBMIT[Submit] --> QUEUE[Queue]
     QUEUE --> EXEC[Execute]
     EXEC --> COMPLETE[Complete]
-    
+
     CLIENT[Client] -.->|Poll| COMPLETE
 ```
 

@@ -7,11 +7,11 @@ Redshift Spectra provides intelligent data delivery that automatically adapts to
 ```mermaid
 flowchart TB
     QUERY[Query Executed] --> SIZE{Result Size?}
-    
+
     SIZE -->|"< Threshold"| INLINE[Inline JSON<br/>Direct response]
     SIZE -->|"> Threshold<br/>(Query API)"| TRUNCATE[Truncated Inline<br/>With warning]
     SIZE -->|"Any Size<br/>(Bulk API)"| S3[S3 Export<br/>Presigned URL]
-    
+
     INLINE --> CLIENT[Client]
     TRUNCATE --> CLIENT
     S3 --> CLIENT
@@ -35,11 +35,11 @@ sequenceDiagram
     participant C as Client
     participant H as Handler
     participant RS as Redshift
-    
+
     C->>H: POST /v1/queries
     H->>RS: Execute Query
     RS-->>H: Results
-    
+
     alt Results <= Threshold
         H-->>C: {data: [...], truncated: false}
     else Results > Threshold
@@ -60,7 +60,7 @@ classDiagram
         +list data
         +ResultMetadata metadata
     }
-    
+
     class ResultMetadata {
         +list columns
         +int row_count
@@ -68,7 +68,7 @@ classDiagram
         +int execution_time_ms
         +string message
     }
-    
+
     QueryResponse --> ResultMetadata
 ```
 
@@ -85,10 +85,10 @@ When results exceed the threshold, the Query API:
 flowchart TB
     subgraph Strategy["LIMIT+1 Strategy"]
         direction TB
-        
+
         INJECT["Inject LIMIT (threshold+1)"] --> EXEC["Execute Query"]
         EXEC --> CHECK{Returned threshold+1?}
-        
+
         CHECK -->|Yes| TRUNC["Return threshold rows<br/>truncated: true"]
         CHECK -->|No| FULL["Return all rows<br/>truncated: false"]
     end
@@ -108,24 +108,24 @@ sequenceDiagram
     participant H as Handler
     participant RS as Redshift
     participant S3 as Amazon S3
-    
+
     C->>H: POST /v1/bulk
     H->>H: Create Job
     H-->>C: {job_id, status: "PENDING"}
-    
+
     H->>RS: Execute Query (async)
     RS->>S3: UNLOAD to S3
     H->>H: Monitor Progress
-    
+
     C->>H: GET /v1/bulk/{job_id}
     H-->>C: {status: "RUNNING", progress: 50%}
-    
+
     RS-->>H: Complete
     H->>S3: Generate Presigned URL
-    
+
     C->>H: GET /v1/bulk/{job_id}
     H-->>C: {status: "COMPLETED", download_url: "..."}
-    
+
     C->>S3: Download Results
     S3-->>C: Data File
 ```
@@ -138,20 +138,20 @@ The Bulk API supports multiple export formats:
 flowchart LR
     subgraph Formats["Supported Formats"]
         direction TB
-        
+
         JSON["JSON<br/>Universal compatibility"]
         CSV["CSV<br/>Spreadsheet friendly"]
         PARQUET["Parquet<br/>Analytics optimized"]
     end
-    
+
     subgraph Compression["Compression Options"]
         direction TB
-        
+
         GZIP["GZIP<br/>Best compression"]
         ZSTD["ZSTD<br/>Faster decompression"]
         NONE["None<br/>Direct access"]
     end
-    
+
     Formats --> Compression
 ```
 
@@ -169,12 +169,12 @@ Results are organized in S3 by tenant and job:
 flowchart TB
     subgraph S3["S3 Bucket Structure"]
         direction TB
-        
+
         BUCKET["s3://spectra-results/"]
         TENANT["tenant-{id}/"]
         JOB["job-{id}/"]
         FILES["data.json<br/>data.csv<br/>data.parquet"]
-        
+
         BUCKET --> TENANT --> JOB --> FILES
     end
 ```
@@ -194,12 +194,12 @@ sequenceDiagram
     participant C as Client
     participant H as Handler
     participant S3 as Amazon S3
-    
+
     C->>H: GET /v1/bulk/{job_id}
     H->>S3: Generate Presigned URL
     S3-->>H: URL (expires in 1h)
     H-->>C: {download_url: "https://..."}
-    
+
     C->>S3: GET download_url
     Note over S3: Validate signature<br/>Check expiration
     S3-->>C: Data file
@@ -217,16 +217,16 @@ Presigned URL characteristics:
 ```mermaid
 flowchart TB
     START[Data Need] --> Q1{Interactive?}
-    
+
     Q1 -->|Yes| Q2{Expected rows?}
     Q1 -->|No| BULK[Use Bulk API]
-    
+
     Q2 -->|"< 10,000"| QUERY[Use Query API]
     Q2 -->|"> 10,000"| Q3{Need complete data?}
-    
+
     Q3 -->|Yes| BULK
     Q3 -->|No| QUERY
-    
+
     QUERY --> INLINE[Inline JSON delivery]
     BULK --> S3[S3 export delivery]
 ```
@@ -313,7 +313,7 @@ Parquet provides columnar storage with:
 
 !!! tip "Right-Size Your Queries"
     For Query API:
-    
+
     - Add LIMIT when exploring data
     - Use aggregations to reduce row count
     - Switch to Bulk API for large exports
@@ -325,14 +325,14 @@ Parquet provides columnar storage with:
 
 !!! tip "Handle Truncation Gracefully"
     When `truncated: true`:
-    
+
     - Display partial data with clear indicator
     - Offer option to export full dataset via Bulk API
     - Log for analytics on query patterns
 
 !!! warning "Presigned URL Security"
     Treat presigned URLs like temporary credentials:
-    
+
     - Don't log URLs with full signatures
     - Use short expiration times
     - Consider single-use restrictions

@@ -69,8 +69,8 @@ class TestBulkHandler:
             BulkJob,
             BulkJobState,
             BulkOperation,
-            DataFormat,
             CompressionType,
+            DataFormat,
         )
 
         now = datetime.now(UTC)
@@ -138,8 +138,8 @@ class TestBulkHandler:
             BulkJob,
             BulkJobState,
             BulkOperation,
-            DataFormat,
             CompressionType,
+            DataFormat,
         )
 
         now = datetime.now(UTC)
@@ -204,7 +204,13 @@ class TestBulkHandler:
 class TestBulkHandlerIntegration:
     """Integration tests for Bulk Lambda handler with mocked AWS services."""
 
-    def test_bulk_handler_full_flow(self, mock_dynamodb, mock_s3, mock_context, monkeypatch):
+    def test_bulk_handler_full_flow(
+        self,
+        mock_dynamodb,
+        mock_s3,
+        mock_context,
+        monkeypatch,
+    ):
         """Test full bulk job creation flow."""
 
         from spectra.handlers.bulk import handler
@@ -212,8 +218,8 @@ class TestBulkHandlerIntegration:
             BulkJob,
             BulkJobState,
             BulkOperation,
-            DataFormat,
             CompressionType,
+            DataFormat,
         )
 
         now = datetime.now(UTC)

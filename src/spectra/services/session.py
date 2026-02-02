@@ -9,6 +9,7 @@ from typing import Any
 
 import boto3
 from aws_lambda_powertools import Logger, Tracer
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 from spectra.utils.config import get_settings
@@ -119,9 +120,8 @@ class SessionService:
             # Query sessions by tenant using GSI
             response = self.table.query(
                 IndexName="gsi1-tenant",
-                KeyConditionExpression=boto3.dynamodb.conditions.Key("tenant_id").eq(tenant_id),
-                FilterExpression=boto3.dynamodb.conditions.Attr("db_user").eq(db_user)
-                & boto3.dynamodb.conditions.Attr("is_active").eq(True),
+                KeyConditionExpression=Key("tenant_id").eq(tenant_id),
+                FilterExpression=Attr("db_user").eq(db_user) & Attr("is_active").eq(True),
             )
 
             for item in response.get("Items", []):
@@ -268,7 +268,7 @@ class SessionService:
         try:
             response = self.table.query(
                 IndexName="gsi1-tenant",
-                KeyConditionExpression=boto3.dynamodb.conditions.Key("tenant_id").eq(tenant_id),
+                KeyConditionExpression=Key("tenant_id").eq(tenant_id),
             )
 
             for item in response.get("Items", []):

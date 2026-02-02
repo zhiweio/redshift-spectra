@@ -4,9 +4,7 @@ Tests for API response building utilities that return aws_lambda_powertools Resp
 """
 
 import json
-from typing import Any
 
-import pytest
 from aws_lambda_powertools.event_handler import Response
 
 from spectra.utils.response import (
@@ -22,7 +20,6 @@ from spectra.utils.response import (
     unauthorized_response,
     validation_error_response,
 )
-
 
 # =============================================================================
 # Build Response Tests

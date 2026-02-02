@@ -12,11 +12,8 @@ from botocore.exceptions import ClientError
 from spectra.services.session import (
     RedshiftSession,
     SessionError,
-    SessionExpiredError,
-    SessionNotFoundError,
     SessionService,
 )
-
 
 # =============================================================================
 # RedshiftSession Model Tests

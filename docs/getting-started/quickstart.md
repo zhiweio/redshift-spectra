@@ -22,7 +22,7 @@ Before starting, ensure you have:
 - **AWS Account** with administrative access
 - **Amazon Redshift cluster** (Serverless or Provisioned)
 - **AWS CLI** configured with appropriate credentials
-- **Terraform** 1.5+ and **Terragrunt** 0.50+ installed
+- **Terraform** 1.11+ and **Terragrunt** 0.99+ installed
 - **Python 3.11+** for building Lambda packages
 - **Make** for running build commands
 
@@ -337,19 +337,19 @@ Now that you have a working API, explore these topics:
 
 ??? question "Query fails with 'Access Denied'"
     Ensure your Redshift credentials in Secrets Manager have permission to execute queries. The database user needs SELECT permission on the target tables.
-    
+
     Also verify the Lambda execution role has permission to access Secrets Manager.
 
 ??? question "Query times out"
     The default timeout is 60 seconds. For longer-running queries:
-    
+
     1. Increase `timeout_seconds` in the request (max: 300 seconds)
     2. For very long queries, use the Bulk API which supports 24-hour timeouts
     3. Optimize your query or add appropriate indexes
 
 ??? question "Results are truncated unexpectedly"
     The Query API has a maximum row limit of 10,000 rows. If you need more:
-    
+
     1. Use the Bulk API for complete data export
     2. Add more specific WHERE clauses to reduce result size
     3. Use aggregation to summarize data
@@ -359,12 +359,12 @@ Now that you have a working API, explore these topics:
     ```bash
     Authorization: Bearer your-api-key
     ```
-    
+
     Also ensure the `X-Tenant-ID` header is present for multi-tenant deployments.
 
 ??? question "SQL validation error"
     The API blocks potentially dangerous SQL patterns. Ensure your query:
-    
+
     - Uses only SELECT statements (no DDL/DML)
     - Doesn't contain comments that could hide injection attempts
     - Doesn't use system tables that are restricted

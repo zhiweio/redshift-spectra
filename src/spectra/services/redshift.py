@@ -8,7 +8,8 @@ Optimized with:
 
 import csv
 import io
-from typing import Any
+import time
+from typing import Any, cast
 
 import boto3
 from aws_lambda_powertools import Logger, Tracer
@@ -291,8 +292,6 @@ class RedshiftService:
             QueryExecutionError: If statement fails
             StatementNotFoundError: If statement ID not found
         """
-        import time
-
         start_time = time.time()
         current_interval = poll_interval_seconds
         max_interval = 5.0  # Cap backoff at 5 seconds
@@ -389,10 +388,10 @@ class RedshiftService:
                     **params,
                     Format="CSV",
                 )
-                return self._parse_csv_result(response)
+                return self._parse_csv_result(cast(dict[str, Any], response))
             else:
                 response = self.client.get_statement_result(**params)
-                return self._parse_typed_result(response)
+                return self._parse_typed_result(cast(dict[str, Any], response))
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")
@@ -694,7 +693,7 @@ class RedshiftService:
         )
 
     @tracer.capture_method
-    def invalidate_tenant_sessions(self, tenant_id: str, db_user: str | None = None) -> int:  # noqa: ARG002
+    def invalidate_tenant_sessions(self, tenant_id: str, db_user: str | None = None) -> int:
         """Invalidate all sessions for a tenant.
 
         Args:

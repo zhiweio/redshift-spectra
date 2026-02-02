@@ -11,7 +11,7 @@ graph TB
         INT[Integration Tests<br/>Medium Count, Medium Speed]
         UNIT[Unit Tests<br/>Many, Fast, Focused]
     end
-    
+
     style E2E fill:#ff6b6b
     style INT fill:#ffd93d
     style UNIT fill:#6bcb77
@@ -81,41 +81,41 @@ class TestRedshiftService:
     @pytest.fixture
     def mock_client(self):
         return Mock()
-    
+
     @pytest.fixture
     def service(self, mock_client):
         with patch('boto3.client', return_value=mock_client):
             return RedshiftService()
-    
+
     def test_execute_statement_success(self, service, mock_client):
         """Test successful query execution."""
         mock_client.execute_statement.return_value = {
             'Id': 'stmt-123'
         }
-        
+
         result = service.execute_statement(
             sql="SELECT 1",
             db_user="test_user",
             tenant_id="tenant-123"
         )
-        
+
         assert result == 'stmt-123'
         mock_client.execute_statement.assert_called_once()
-    
+
     def test_execute_statement_with_session_reuse(self, service, mock_client):
         """Test query execution with session reuse."""
         mock_client.execute_statement.return_value = {
             'Id': 'stmt-123',
             'SessionId': 'session-abc'
         }
-        
+
         result = service.execute_statement(
             sql="SELECT 1",
             db_user="test_user",
             tenant_id="tenant-123",
             use_session=True
         )
-        
+
         # Verify SessionKeepAliveSeconds was passed
         call_args = mock_client.execute_statement.call_args
         assert 'SessionKeepAliveSeconds' in call_args.kwargs
@@ -128,12 +128,12 @@ class TestSessionService:
     @pytest.fixture
     def mock_table(self):
         return Mock()
-    
+
     @pytest.fixture
     def service(self, mock_table):
         with patch.object(SessionService, '_get_table', return_value=mock_table):
             return SessionService()
-    
+
     def test_get_active_session_found(self, service, mock_table):
         """Test retrieving an active session."""
         mock_table.get_item.return_value = {
@@ -143,12 +143,12 @@ class TestSessionService:
                 'expires_at': (datetime.now(UTC) + timedelta(hours=1)).isoformat()
             }
         }
-        
+
         session = service.get_active_session('tenant-abc', 'db_user')
-        
+
         assert session is not None
         assert session.session_id == 'session-123'
-    
+
     def test_get_active_session_expired(self, service, mock_table):
         """Test that expired sessions return None."""
         mock_table.get_item.return_value = {
@@ -157,9 +157,9 @@ class TestSessionService:
                 'expires_at': (datetime.now(UTC) - timedelta(hours=1)).isoformat()
             }
         }
-        
+
         session = service.get_active_session('tenant-abc', 'db_user')
-        
+
         assert session is None
 ```
 
@@ -192,16 +192,16 @@ class TestJobServiceIntegration:
     def test_create_and_get_job(self, dynamodb_table):
         """Test full job lifecycle with DynamoDB."""
         service = JobService()
-        
+
         # Create job
         job = service.create_job(
             tenant_id='tenant-123',
             sql='SELECT 1'
         )
-        
+
         # Retrieve job
         retrieved = service.get_job(job.job_id)
-        
+
         assert retrieved.job_id == job.job_id
         assert retrieved.status == JobStatus.QUEUED
 ```
@@ -223,14 +223,14 @@ class TestQueryWorkflow:
         )
         assert response.status_code == 202
         job_id = response.json()['job_id']
-        
+
         # Poll for completion
         for _ in range(30):
             status_response = api_client.get(f'/v1/jobs/{job_id}')
             if status_response.json()['status'] == 'COMPLETED':
                 break
             time.sleep(1)
-        
+
         # Get results
         result_response = api_client.get(f'/v1/jobs/{job_id}/results')
         assert result_response.status_code == 200
@@ -276,7 +276,7 @@ def tenant_context():
 def test_with_mock(mocker):
     mock_client = mocker.patch('boto3.client')
     mock_client.return_value.execute_statement.return_value = {'Id': 'test'}
-    
+
     # Test code here
 ```
 
@@ -326,21 +326,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install uv
         run: pip install uv
-      
+
       - name: Install dependencies
         run: uv sync
-      
+
       - name: Run tests
         run: make ci-test
-      
+
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         with:
@@ -350,13 +350,13 @@ jobs:
 ## Best Practices
 
 !!! tip "Test Behavior, Not Implementation"
-    
+
     Focus on what the code does, not how it does it. This makes refactoring easier.
 
 !!! tip "Use Descriptive Test Names"
-    
+
     `test_execute_statement_with_invalid_sql_raises_error` is better than `test_error`.
 
 !!! warning "Avoid Test Interdependence"
-    
+
     Each test should be independent. Use fixtures for setup, not shared state.

@@ -11,22 +11,22 @@ flowchart LR
     subgraph Create["1. Create"]
         C1[Create Job]
     end
-    
+
     subgraph Upload["2. Upload"]
         U1[Get Upload URL]
         U2[PUT Data to S3]
     end
-    
+
     subgraph Process["3. Process"]
         P1[Close Job]
         P2[Monitor Status]
     end
-    
+
     subgraph Download["4. Download"]
         D1[Get Results URL]
         D2[GET Data from S3]
     end
-    
+
     Create --> Upload
     Upload --> Process
     Process --> Download
@@ -55,17 +55,17 @@ Understanding the job lifecycle is essential for building robust integrations:
 ```mermaid
 stateDiagram-v2
     [*] --> Open: Create Job
-    
+
     Open --> UploadComplete: Data uploaded<br>(or query operation)
     Open --> Aborted: User cancels
-    
+
     UploadComplete --> InProgress: Processing starts
     UploadComplete --> Aborted: User cancels
-    
+
     InProgress --> JobComplete: Success
     InProgress --> Failed: Error
     InProgress --> Aborted: User cancels
-    
+
     JobComplete --> [*]
     Failed --> [*]
     Aborted --> [*]
@@ -91,7 +91,7 @@ flowchart TB
     subgraph Export["Export Operations"]
         Query["query<br>Extract data from Redshift"]
     end
-    
+
     subgraph Import["Import Operations"]
         Insert["insert<br>Add new records"]
         Update["update<br>Modify existing records"]
@@ -125,18 +125,18 @@ sequenceDiagram
     Client->>API: POST /bulk/jobs
     API->>Lambda: Create job
     Lambda-->>Client: job_id, state=Open
-    
+
     Client->>API: PATCH /bulk/jobs/{id}
     Note right of Client: state=UploadComplete
-    
+
     Lambda->>Redshift: UNLOAD query
     Redshift->>S3: Write results
-    
+
     loop Poll Status
         Client->>API: GET /bulk/jobs/{id}
         API-->>Client: state, progress
     end
-    
+
     Client->>API: GET /bulk/jobs/{id}/results
     API-->>Client: download_url
     Client->>S3: Download results
@@ -251,23 +251,23 @@ sequenceDiagram
 
     Client->>API: POST /bulk/jobs
     API-->>Client: job_id, state=Open
-    
+
     Client->>API: GET /bulk/jobs/{id}/upload-url
     API-->>Client: upload_url
-    
+
     Client->>S3: PUT data
-    
+
     Client->>API: PATCH /bulk/jobs/{id}
     Note right of Client: state=UploadComplete
-    
+
     Lambda->>S3: Read data
     Lambda->>Redshift: COPY data
-    
+
     loop Poll Status
         Client->>API: GET /bulk/jobs/{id}
         API-->>Client: state, progress
     end
-    
+
     Client->>API: GET /bulk/jobs/{id}/results
     API-->>Client: success/failed counts
 ```
@@ -389,7 +389,7 @@ flowchart LR
     subgraph Without["Without Compression"]
         A1["100 MB"] -->|"Transfer"| A2["100 MB"]
     end
-    
+
     subgraph With["With GZIP"]
         B1["100 MB"] -->|"Compress"| B2["~15 MB"]
         B2 -->|"Transfer"| B3["~15 MB"]
@@ -511,7 +511,7 @@ curl -X PATCH "$API_URL/bulk/jobs/bulk-job-abc123" \
 ```mermaid
 flowchart TD
     Data["Source Data"]
-    
+
     Data --> Sort["Sort by distribution key"]
     Sort --> Compress["Apply GZIP compression"]
     Compress --> Split["Split into optimal chunks"]

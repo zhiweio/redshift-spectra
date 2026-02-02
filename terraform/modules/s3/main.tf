@@ -172,7 +172,7 @@ resource "aws_s3_bucket_cors_configuration" "data" {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST", "HEAD"]
     allowed_origins = var.cors_allowed_origins
-    expose_headers  = [
+    expose_headers = [
       "ETag",
       "Content-Length",
       "Content-Type",
@@ -288,6 +288,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "logs" {
   rule {
     id     = "expire-logs"
     status = "Enabled"
+
+    # Empty filter applies rule to all objects in the bucket
+    filter {}
 
     expiration {
       days = var.logs_expiration_days

@@ -5,9 +5,10 @@ supporting multiple authentication modes (API Key, JWT, IAM).
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.event_handler.exceptions import UnauthorizedError
