@@ -127,7 +127,7 @@ class TestRedshiftService:
         self,
         redshift_service: RedshiftService,
         mock_redshift_client: MagicMock,
-        _mock_session_service: MagicMock,
+        mock_session_service: MagicMock,
     ) -> None:
         """Test statement execution without session reuse."""
         mock_redshift_client.execute_statement.return_value = {"Id": "stmt-123"}

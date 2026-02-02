@@ -112,6 +112,7 @@ ignore = [
     "PLR0913",  # too many arguments
     "PLR0915",  # too many statements
     "PLR2004",  # magic value used in comparison
+    "ARG002",   # unused method argument
 ]
 
 [tool.ruff.lint.isort]

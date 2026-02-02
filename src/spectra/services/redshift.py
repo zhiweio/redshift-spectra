@@ -693,7 +693,7 @@ class RedshiftService:
         )
 
     @tracer.capture_method
-    def invalidate_tenant_sessions(self, tenant_id: str, db_user: str | None = None) -> int:  # noqa: ARG002
+    def invalidate_tenant_sessions(self, tenant_id: str, db_user: str | None = None) -> int:
         """Invalidate all sessions for a tenant.
 
         Args:

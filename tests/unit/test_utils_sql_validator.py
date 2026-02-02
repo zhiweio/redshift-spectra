@@ -395,7 +395,10 @@ class TestSQLValidator:
             "QUERY_TOO_COMPLEX",
         ]
 
-    def test_permissive_mode_allows_union(self, _permissive_validator: SQLValidator) -> None:
+    def test_permissive_mode_allows_union(
+        self,
+        permissive_validator: SQLValidator,
+    ) -> None:
         """Test that permissive mode with allow_union allows UNION."""
         # Create a validator that explicitly allows unions and disables injection checks
         validator = SQLValidator(

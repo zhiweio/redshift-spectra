@@ -339,7 +339,12 @@ class TestQueryHandler:
 class TestQueryHandlerIntegration:
     """Integration tests for Query Lambda handler with mocked AWS services."""
 
-    def test_query_handler_full_flow(self, _mock_dynamodb, mock_context, _monkeypatch):
+    def test_query_handler_full_flow(
+        self,
+        mock_dynamodb,
+        mock_context,
+        monkeypatch,
+    ):
         """Test full synchronous query execution flow."""
 
         # Need to reimport handler after setting env var
@@ -612,7 +617,7 @@ class TestQueryHandlerEdgeCases:
                             call_kwargs = mock_job_svc.return_value.create_job.call_args.kwargs
                             assert call_kwargs["idempotency_key"] == "unique-request-123"
 
-    def test_duplicate_idempotency_key(self, _sample_job, mock_context):
+    def test_duplicate_idempotency_key(self, sample_job, mock_context):
         """Test handling of duplicate idempotency key."""
         from spectra.handlers.query import app
         from spectra.services.job import DuplicateJobError

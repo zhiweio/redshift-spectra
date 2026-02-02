@@ -194,6 +194,10 @@ def submit_query() -> Response:
         # Calculate execution time
         execution_time_ms = int((time.time() - start_time) * 1000)
 
+        # Extract column names and types for JobResult
+        column_names = [col.get("name", "") for col in columns]
+        column_types = [col.get("type", "") for col in columns]
+
         # Update job status to completed
         job_service.update_job_status(
             job_id=job.job_id,
@@ -201,7 +205,8 @@ def submit_query() -> Response:
             result=JobResult(
                 row_count=len(records),
                 location="inline",
-                columns=columns,
+                columns=column_names,
+                column_types=column_types,
             ),
         )
 
