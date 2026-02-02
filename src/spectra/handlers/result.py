@@ -142,7 +142,7 @@ def get_job_results(job_id: str) -> Response:
                 )
 
             # Generate presigned URL
-            download_url = export_service.generate_presigned_url(s3_uri)
+            download_url, _ = export_service.generate_presigned_url(s3_uri)
 
             # Update job with result location
             job_service.update_job_result_location(

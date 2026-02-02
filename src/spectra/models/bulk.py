@@ -224,10 +224,21 @@ class BulkJobInfo(BaseModel):
     api_version: str = Field(default="v1", description="API version")
     concurrency_mode: str = Field(default="Parallel", description="Concurrency mode")
 
+    # Processing statistics
+    number_records_processed: int = Field(default=0, description="Records successfully processed")
+    number_records_failed: int = Field(default=0, description="Records that failed processing")
+    retries: int = Field(default=0, description="Number of retry attempts")
+    total_processing_time: int = Field(default=0, description="Total processing time in ms")
+
     # Error info
     error_message: str | None = Field(default=None, description="Error message if failed")
 
     model_config = {"use_enum_values": True}
+
+    @property
+    def job_id(self) -> str:
+        """Alias for id field for API compatibility."""
+        return self.id
 
 
 class BulkJobResult(BaseModel):

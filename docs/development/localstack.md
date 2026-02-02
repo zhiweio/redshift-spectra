@@ -24,9 +24,6 @@ make localstack-start
 # Or using Docker Compose directly
 docker compose up -d localstack
 
-# Or using the helper script (Windows PowerShell)
-.\scripts\localstack-deploy.ps1 start
-
 # Or using the helper script (Bash)
 ./scripts/localstack-deploy.sh start
 ```

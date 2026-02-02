@@ -91,6 +91,82 @@ class ExportService:
             raise ExportError(f"Failed to export results: {e}")
 
     @tracer.capture_method
+    def write_parquet_results(
+        self,
+        job_id: str,
+        tenant_id: str,
+        columns: list[str],
+        data: list[dict[str, Any]],
+    ) -> str:
+        """Write query results to S3 in Parquet format.
+
+        Note: Parquet support requires pyarrow. Falls back to JSON if unavailable.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+            columns: Column names
+            data: Result data as list of dicts
+
+        Returns:
+            S3 URI of the result file
+
+        Raises:
+            ExportError: If export fails
+        """
+        try:
+            # Try to use pyarrow for Parquet, fall back to JSON
+            try:
+                from io import BytesIO
+
+                import pyarrow as pa
+                import pyarrow.parquet as pq
+
+                key = self._build_key(tenant_id, job_id, "parquet")
+
+                # Create PyArrow table
+                table = pa.Table.from_pylist(data)
+
+                # Write to bytes buffer
+                buffer = BytesIO()
+                pq.write_table(table, buffer)
+                buffer.seek(0)
+
+                self.s3_client.put_object(
+                    Bucket=self.settings.s3_bucket_name,
+                    Key=key,
+                    Body=buffer.getvalue(),
+                    ContentType="application/octet-stream",
+                    Metadata={
+                        "job_id": job_id,
+                        "tenant_id": tenant_id,
+                        "row_count": str(len(data)),
+                        "format": "parquet",
+                    },
+                )
+
+                s3_uri = f"s3://{self.settings.s3_bucket_name}/{key}"
+                logger.info(
+                    "Exported Parquet results to S3",
+                    extra={"s3_uri": s3_uri, "row_count": len(data)},
+                )
+
+                return s3_uri
+
+            except ImportError:
+                logger.warning("pyarrow not available, falling back to JSON export")
+                return self.write_json_results(
+                    job_id=job_id,
+                    tenant_id=tenant_id,
+                    data=data,
+                    metadata={"columns": columns, "original_format": "parquet"},
+                )
+
+        except ClientError as e:
+            logger.error("Failed to export Parquet to S3", extra={"error": str(e)})
+            raise ExportError(f"Failed to export results: {e}")
+
+    @tracer.capture_method
     def write_csv_results(
         self,
         job_id: str,

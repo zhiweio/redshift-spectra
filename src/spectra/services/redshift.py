@@ -9,7 +9,7 @@ Optimized with:
 import csv
 import io
 import time
-from typing import Any
+from typing import Any, cast
 
 import boto3
 from aws_lambda_powertools import Logger, Tracer
@@ -388,10 +388,10 @@ class RedshiftService:
                     **params,
                     Format="CSV",
                 )
-                return self._parse_csv_result(response)
+                return self._parse_csv_result(cast(dict[str, Any], response))
             else:
                 response = self.client.get_statement_result(**params)
-                return self._parse_typed_result(response)
+                return self._parse_typed_result(cast(dict[str, Any], response))
 
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "Unknown")

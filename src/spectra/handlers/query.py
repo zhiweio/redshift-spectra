@@ -20,6 +20,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
 from spectra.middleware.tenant import TenantContext, extract_tenant_context
+from spectra.models.job import JobError, JobResult, JobStatus
 from spectra.models.query import QueryRequest, QueryResponse, ResultMetadata
 from spectra.services.job import DuplicateJobError, JobService
 from spectra.services.redshift import (
@@ -196,9 +197,12 @@ def submit_query() -> Response:
         # Update job status to completed
         job_service.update_job_status(
             job_id=job.job_id,
-            status="COMPLETED",
-            result_rows=len(records),
-            duration_ms=execution_time_ms,
+            status=JobStatus.COMPLETED,
+            result=JobResult(
+                row_count=len(records),
+                location="inline",
+                columns=columns,
+            ),
         )
 
         # Build response
@@ -239,7 +243,14 @@ def submit_query() -> Response:
 
         # Update job status
         if job:
-            job_service.update_job_status(job.job_id, status="TIMEOUT")
+            job_service.update_job_status(
+                job.job_id,
+                status=JobStatus.TIMEOUT,
+                error=JobError(
+                    code="QUERY_TIMEOUT",
+                    message=f"Query exceeded timeout of {request.timeout_seconds} seconds",
+                ),
+            )
 
         response = QueryResponse(
             job_id=job.job_id if job else "unknown",
@@ -260,9 +271,11 @@ def submit_query() -> Response:
         if job:
             job_service.update_job_status(
                 job.job_id,
-                status="FAILED",
-                error_code=e.code,
-                error_message=str(e),
+                status=JobStatus.FAILED,
+                error=JobError(
+                    code=e.code or "QUERY_FAILED",
+                    message=str(e),
+                ),
             )
 
         response = QueryResponse(
@@ -282,9 +295,11 @@ def submit_query() -> Response:
         if job:
             job_service.update_job_status(
                 job.job_id,
-                status="FAILED",
-                error_code="INTERNAL_ERROR",
-                error_message=str(e),
+                status=JobStatus.FAILED,
+                error=JobError(
+                    code="INTERNAL_ERROR",
+                    message=str(e),
+                ),
             )
 
         raise InternalServerError(f"Failed to execute query: {e}")

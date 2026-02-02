@@ -369,3 +369,118 @@ class JobService:
         except ClientError as e:
             logger.error("Failed to get pending jobs", extra={"error": str(e)})
             raise
+
+    @tracer.capture_method
+    def update_job_submitted(self, job_id: str, statement_id: str) -> Job:
+        """Update job with Redshift statement ID.
+
+        Args:
+            job_id: Job identifier
+            statement_id: Redshift Data API statement ID
+
+        Returns:
+            Updated Job instance
+        """
+        return self.update_job_status(
+            job_id=job_id,
+            status=JobStatus.SUBMITTED,
+            statement_id=statement_id,
+        )
+
+    @tracer.capture_method
+    def update_job_running(self, job_id: str) -> Job:
+        """Mark job as running.
+
+        Args:
+            job_id: Job identifier
+
+        Returns:
+            Updated Job instance
+        """
+        return self.update_job_status(
+            job_id=job_id,
+            status=JobStatus.RUNNING,
+        )
+
+    @tracer.capture_method
+    def update_job_completed(
+        self,
+        job_id: str,
+        row_count: int = 0,
+        size_bytes: int = 0,
+    ) -> Job:
+        """Mark job as completed with result info.
+
+        Args:
+            job_id: Job identifier
+            row_count: Number of result rows
+            size_bytes: Result size in bytes
+
+        Returns:
+            Updated Job instance
+        """
+        return self.update_job_status(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            result=JobResult(
+                row_count=row_count,
+                size_bytes=size_bytes,
+                location="inline",
+            ),
+        )
+
+    @tracer.capture_method
+    def update_job_failed(
+        self,
+        job_id: str,
+        error_code: str,
+        error_message: str,
+    ) -> Job:
+        """Mark job as failed with error info.
+
+        Args:
+            job_id: Job identifier
+            error_code: Error code
+            error_message: Error message
+
+        Returns:
+            Updated Job instance
+        """
+        return self.update_job_status(
+            job_id=job_id,
+            status=JobStatus.FAILED,
+            error=JobError(
+                code=error_code,
+                message=error_message,
+            ),
+        )
+
+    @tracer.capture_method
+    def update_job_result_location(
+        self,
+        job_id: str,
+        location: str,
+        format: str = "json",
+        download_url: str | None = None,
+    ) -> Job:
+        """Update job with result location in S3.
+
+        Args:
+            job_id: Job identifier
+            location: S3 URI of the results
+            format: Result format (json, csv, parquet)
+            download_url: Presigned download URL
+
+        Returns:
+            Updated Job instance
+        """
+        return self.update_job_status(
+            job_id=job_id,
+            status=JobStatus.COMPLETED,
+            result=JobResult(
+                row_count=0,  # Already set during export
+                location=location,
+                format=format,
+                download_url=download_url,
+            ),
+        )

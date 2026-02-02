@@ -58,7 +58,7 @@ upgrade:  ## Upgrade all dependencies
 
 clean:  ## Clean build artifacts and caches
 	@echo -e "$(YELLOW)Cleaning build artifacts...$(NC)"
-	rm -rf dist/ build/ *.egg-info .pytest_cache .mypy_cache .ruff_cache
+	rm -rf dist/ build/ *.egg-info .pytest_cache .ty_cache .ruff_cache
 	rm -rf .coverage htmlcov/ coverage.xml
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
@@ -83,9 +83,9 @@ format-check:  ## Check code formatting
 	@echo -e "$(BLUE)Checking code format...$(NC)"
 	uv run ruff format --check $(SRC_DIR) $(TESTS_DIR)
 
-type-check:  ## Run type checking with mypy
+type-check:  ## Run type checking with ty
 	@echo -e "$(BLUE)Running type checks...$(NC)"
-	uv run mypy $(SRC_DIR)
+	uv run ty check $(SRC_DIR)
 
 check-all: lint format-check type-check  ## Run all code quality checks
 
@@ -526,7 +526,7 @@ ci-lint:  ## Run CI linting
 	uv sync
 	uv run ruff check $(SRC_DIR) $(TESTS_DIR) --output-format=github
 	uv run ruff format --check $(SRC_DIR) $(TESTS_DIR)
-	uv run mypy $(SRC_DIR)
+	uv run ty check $(SRC_DIR)
 
 # =============================================================================
 # Version Management
