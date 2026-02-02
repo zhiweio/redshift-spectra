@@ -3,7 +3,8 @@
 # =============================================================================
 
 include "root" {
-  path = find_in_parent_folders()
+  path   = find_in_parent_folders()
+  expose = true
 }
 
 include "common" {
@@ -26,6 +27,7 @@ dependency "dynamodb" {
   mock_outputs = {
     jobs_table_name       = "mock-jobs-table"
     sessions_table_name   = "mock-sessions-table"
+    bulk_jobs_table_name  = "mock-bulk-jobs-table"
     jobs_table_stream_arn = "arn:aws:dynamodb:us-east-1:987654321098:table/mock-jobs/stream/2024-01-01T00:00:00.000"
   }
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -35,6 +37,15 @@ dependency "s3" {
   config_path = "../s3"
   mock_outputs = {
     bucket_name = "mock-bucket"
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+}
+
+dependency "secrets_manager" {
+  config_path = "../secrets-manager"
+  mock_outputs = {
+    redshift_credentials_secret_arn = "arn:aws:secretsmanager:us-east-1:987654321098:secret:mock-redshift-credentials"
+    jwt_secret_arn                  = "arn:aws:secretsmanager:us-east-1:987654321098:secret:mock-jwt-secret"
   }
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
 }
@@ -58,6 +69,7 @@ terraform {
 
 inputs = {
   name_prefix = "${include.root.locals.project_name}-${include.root.locals.environment}"
+  environment = include.root.locals.environment
   region      = local.region.aws_region
   account_id  = local.account.account_id
 
@@ -66,6 +78,7 @@ inputs = {
   lambda_timeout     = lookup(local.env.lambda, "timeout", 120)
   lambda_memory_size = lookup(local.env.lambda, "memory_size", 1024)
   log_level          = lookup(local.env.lambda, "log_level", "INFO")
+  log_retention_days = lookup(local.env.monitoring, "log_retention_days", 90)
 
   # Lambda Layer
   create_layer       = true
@@ -81,17 +94,42 @@ inputs = {
   api_role_arn        = dependency.iam.outputs.api_handler_role_arn
   worker_role_arn     = dependency.iam.outputs.worker_role_arn
 
-  # Environment variables
-  environment_variables = {
-    ENVIRONMENT                                   = include.root.locals.environment
-    SPECTRA_DYNAMODB_TABLE_NAME                   = dependency.dynamodb.outputs.jobs_table_name
-    SPECTRA_DYNAMODB_SESSIONS_TABLE_NAME          = dependency.dynamodb.outputs.sessions_table_name
-    SPECTRA_S3_BUCKET_NAME                        = dependency.s3.outputs.bucket_name
-    SPECTRA_REDSHIFT_WORKGROUP_NAME               = local.env.redshift.workgroup_name
-    SPECTRA_REDSHIFT_DATABASE                     = local.env.redshift.database
-    SPECTRA_REDSHIFT_SESSION_KEEP_ALIVE_SECONDS   = lookup(local.env, "redshift_session_keep_alive_seconds", 3600)
-    SPECTRA_REDSHIFT_SESSION_IDLE_TIMEOUT_SECONDS = lookup(local.env, "redshift_session_idle_timeout_seconds", 300)
-  }
+  # ==========================================================================
+  # Redshift Configuration
+  # ==========================================================================
+  redshift_cluster_id                   = lookup(local.env.redshift, "cluster_id", "")
+  redshift_database                     = local.env.redshift.database
+  redshift_workgroup_name               = local.env.redshift.workgroup_name
+  redshift_secret_arn                   = dependency.secrets_manager.outputs.redshift_credentials_secret_arn
+  redshift_session_keep_alive_seconds   = lookup(local.env, "redshift_session_keep_alive_seconds", 3600)
+  redshift_session_idle_timeout_seconds = lookup(local.env, "redshift_session_idle_timeout_seconds", 300)
+
+  # ==========================================================================
+  # DynamoDB Configuration
+  # ==========================================================================
+  dynamodb_table_name          = dependency.dynamodb.outputs.jobs_table_name
+  dynamodb_sessions_table_name = dependency.dynamodb.outputs.sessions_table_name
+  dynamodb_bulk_table_name     = dependency.dynamodb.outputs.bulk_jobs_table_name
+
+  # ==========================================================================
+  # S3 Configuration
+  # ==========================================================================
+  s3_bucket_name    = dependency.s3.outputs.bucket_name
+  s3_use_path_style = false
+
+  # ==========================================================================
+  # Authentication Configuration
+  # ==========================================================================
+  auth_mode        = "jwt"
+  jwt_secret_arn   = dependency.secrets_manager.outputs.jwt_secret_arn
+  jwt_issuer       = "redshift-spectra-prod"
+  jwt_audience     = "redshift-spectra-api"
+  jwt_expiry_hours = lookup(local.env.security, "jwt_expiry_hours", 8)
+
+  # ==========================================================================
+  # Not LocalStack
+  # ==========================================================================
+  is_localstack = false
 
   # DynamoDB Stream trigger
   enable_dynamodb_trigger = true
@@ -107,4 +145,6 @@ inputs = {
 
   # Enable X-Ray tracing
   enable_xray = true
+
+  tags = include.root.locals.common_tags
 }

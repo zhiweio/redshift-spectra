@@ -408,6 +408,7 @@ class JobService:
         job_id: str,
         row_count: int = 0,
         size_bytes: int = 0,
+        location: str | None = None,
     ) -> Job:
         """Mark job as completed with result info.
 
@@ -415,6 +416,7 @@ class JobService:
             job_id: Job identifier
             row_count: Number of result rows
             size_bytes: Result size in bytes
+            location: Result location (S3 URI or 'inline')
 
         Returns:
             Updated Job instance
@@ -425,7 +427,7 @@ class JobService:
             result=JobResult(
                 row_count=row_count,
                 size_bytes=size_bytes,
-                location="inline",
+                location=location or "inline",
             ),
         )
 

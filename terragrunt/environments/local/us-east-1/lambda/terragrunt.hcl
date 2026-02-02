@@ -35,6 +35,7 @@ dependency "dynamodb" {
   mock_outputs = {
     jobs_table_name       = "mock-jobs-table"
     sessions_table_name   = "mock-sessions-table"
+    bulk_jobs_table_name  = "mock-bulk-jobs-table"
     jobs_table_stream_arn = "arn:aws:dynamodb:us-east-1:000000000000:table/mock-jobs/stream/2024-01-01T00:00:00.000"
   }
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
@@ -45,6 +46,16 @@ dependency "s3" {
 
   mock_outputs = {
     bucket_name = "mock-bucket"
+  }
+  mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
+}
+
+dependency "secrets_manager" {
+  config_path = "../secrets-manager"
+
+  mock_outputs = {
+    redshift_credentials_secret_arn = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-redshift-credentials"
+    jwt_secret_arn                  = "arn:aws:secretsmanager:us-east-1:000000000000:secret:mock-jwt-secret"
   }
   mock_outputs_allowed_terraform_commands = ["init", "validate", "plan"]
 }
@@ -65,7 +76,10 @@ locals {
   lambda_dist_dir = "${get_repo_root()}/dist/lambda"
 
   # LocalStack endpoint for environment variables
-  localstack_endpoint = local.region.localstack.endpoint
+  # Use host.docker.internal for Lambda containers to reach LocalStack on macOS/Windows
+  localstack_endpoint    = local.region.localstack.endpoint
+  localstack_docker_host = "http://host.docker.internal:4566"
+  localstack_hostname    = "host.docker.internal"
 }
 
 # Terraform module source
@@ -76,6 +90,7 @@ terraform {
 # Module inputs
 inputs = {
   name_prefix = "${include.root.locals.project_name}-${include.root.locals.environment}"
+  environment = include.root.locals.environment
   region      = local.region.aws_region
   account_id  = local.account.account_id
 
@@ -88,39 +103,61 @@ inputs = {
   # Shorter log retention for local dev
   log_retention_days = lookup(local.env.monitoring, "log_retention_days", 1)
 
-  # Lambda Layer - shared dependencies
-  create_layer       = true
-  layer_package_path = "${local.lambda_dist_dir}/layer.zip"
+  # Lambda Layer - disabled for LocalStack (Lambda Layers not fully supported)
+  # LocalStack community edition doesn't properly load layer content into Python path.
+  # Instead, we use "fat" Lambda packages that include all dependencies.
+  create_layer       = false
+  layer_package_path = null
 
-  # Function packages (code only)
-  authorizer_package_path = "${local.lambda_dist_dir}/authorizer.zip"
-  api_package_path        = "${local.lambda_dist_dir}/api-handler.zip"
-  worker_package_path     = "${local.lambda_dist_dir}/worker.zip"
+  # Fat Lambda packages (include all dependencies, no layer needed)
+  # Built with: make package-lambda-fat
+  authorizer_package_path = "${local.lambda_dist_dir}/authorizer-fat.zip"
+  api_package_path        = "${local.lambda_dist_dir}/api-handler-fat.zip"
+  worker_package_path     = "${local.lambda_dist_dir}/worker-fat.zip"
 
   # IAM roles (LocalStack IAM is permissive by default)
   authorizer_role_arn = dependency.iam.outputs.authorizer_role_arn
   api_role_arn        = dependency.iam.outputs.api_handler_role_arn
   worker_role_arn     = dependency.iam.outputs.worker_role_arn
 
-  # Environment variables for LocalStack
-  environment_variables = {
-    ENVIRONMENT                                   = include.root.locals.environment
-    SPECTRA_DYNAMODB_TABLE_NAME                   = dependency.dynamodb.outputs.jobs_table_name
-    SPECTRA_DYNAMODB_SESSIONS_TABLE_NAME          = dependency.dynamodb.outputs.sessions_table_name
-    SPECTRA_S3_BUCKET_NAME                        = dependency.s3.outputs.bucket_name
-    SPECTRA_REDSHIFT_WORKGROUP_NAME               = local.env.redshift.workgroup_name
-    SPECTRA_REDSHIFT_DATABASE                     = local.env.redshift.database
-    SPECTRA_REDSHIFT_SESSION_KEEP_ALIVE_SECONDS   = "3600"
-    SPECTRA_REDSHIFT_SESSION_IDLE_TIMEOUT_SECONDS = "300"
+  # ==========================================================================
+  # Redshift Configuration
+  # ==========================================================================
+  redshift_cluster_id                   = "local-cluster"
+  redshift_database                     = local.env.redshift.database
+  redshift_workgroup_name               = local.env.redshift.workgroup_name
+  redshift_secret_arn                   = dependency.secrets_manager.outputs.redshift_credentials_secret_arn
+  redshift_session_keep_alive_seconds   = 3600
+  redshift_session_idle_timeout_seconds = 300
 
-    # LocalStack-specific environment variables
-    IS_LOCALSTACK       = "true"
-    LOCALSTACK_HOSTNAME = "localhost"
-    AWS_ENDPOINT_URL    = local.localstack_endpoint
+  # ==========================================================================
+  # DynamoDB Configuration
+  # ==========================================================================
+  dynamodb_table_name          = dependency.dynamodb.outputs.jobs_table_name
+  dynamodb_sessions_table_name = dependency.dynamodb.outputs.sessions_table_name
+  dynamodb_bulk_table_name     = dependency.dynamodb.outputs.bulk_jobs_table_name
 
-    # Use path-style S3 URLs for LocalStack
-    AWS_S3_USE_PATH_STYLE = "true"
-  }
+  # ==========================================================================
+  # S3 Configuration
+  # ==========================================================================
+  s3_bucket_name    = dependency.s3.outputs.bucket_name
+  s3_use_path_style = true
+
+  # ==========================================================================
+  # Authentication Configuration
+  # ==========================================================================
+  auth_mode        = "jwt"
+  jwt_secret_arn   = dependency.secrets_manager.outputs.jwt_secret_arn
+  jwt_issuer       = "redshift-spectra-local"
+  jwt_audience     = "redshift-spectra-api"
+  jwt_expiry_hours = lookup(local.env.security, "jwt_expiry_hours", 720)
+
+  # ==========================================================================
+  # LocalStack Configuration
+  # ==========================================================================
+  is_localstack       = true
+  localstack_hostname = local.localstack_hostname
+  aws_endpoint_url    = local.localstack_docker_host
 
   # DynamoDB Stream trigger for worker
   # Disabled for LocalStack - DynamoDB Streams event source mapping not fully supported
@@ -142,7 +179,5 @@ inputs = {
   api_reserved_concurrency        = -1
   worker_reserved_concurrency     = -1
 
-  # JWT configuration (relaxed for local development)
-  jwt_secret_arn   = null
-  jwt_expiry_hours = lookup(local.env.security, "jwt_expiry_hours", 720)
+  tags = include.root.locals.common_tags
 }

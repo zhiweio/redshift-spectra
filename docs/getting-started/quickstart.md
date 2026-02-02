@@ -22,7 +22,7 @@ Before starting, ensure you have:
 - **AWS Account** with administrative access
 - **Amazon Redshift cluster** (Serverless or Provisioned)
 - **AWS CLI** configured with appropriate credentials
-- **Terraform** 1.14+ and **Terragrunt** 0.99+ installed
+- **Terraform** 1.11+ and **Terragrunt** 0.99+ installed
 - **Python 3.11+** for building Lambda packages
 - **Make** for running build commands
 

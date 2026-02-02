@@ -33,9 +33,9 @@ services:
       - SERVICES=s3,dynamodb,lambda,iam,apigateway,secretsmanager,cloudwatch,logs,sts,ssm
 
       # Lambda Configuration
-      - LAMBDA_EXECUTOR=docker
-      - LAMBDA_DOCKER_NETWORK=redshift-spectra-network
-      - LAMBDA_REMOVE_CONTAINERS=true
+      # Use 'local' executor for better layer support
+      # 'docker' executor has known issues with Lambda Layers
+      - LAMBDA_EXECUTOR=local
       - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
 
       # S3 Configuration

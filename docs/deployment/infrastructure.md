@@ -93,7 +93,7 @@ flowchart LR
 ### Prerequisites
 
 - AWS CLI configured with appropriate credentials
-- Terraform >= 1.14
+- Terraform >= 1.11
 - Terragrunt >= 0.99
 - Lambda packages built (`make package-all`)
 

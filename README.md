@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.14-blueviolet)](https://www.terraform.io/)
+[![Terraform](https://img.shields.io/badge/terraform-%3E%3D1.11-blueviolet)](https://www.terraform.io/)
 [![Terragrunt](https://img.shields.io/badge/terragrunt-%3E%3D0.99-blueviolet)](https://terragrunt.gruntwork.io/)
 [![LocalStack](https://img.shields.io/badge/localstack-local%20dev-ff69b4)](https://localstack.cloud/)
 [![AWS](https://img.shields.io/badge/AWS-Serverless-orange)](https://aws.amazon.com/)

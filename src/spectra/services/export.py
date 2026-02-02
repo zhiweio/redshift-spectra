@@ -356,6 +356,71 @@ class ExportService:
         return f"{self.settings.s3_prefix}{tenant_id}/{date_prefix}/{job_id}/results.{extension}"
 
     @tracer.capture_method
+    def export_results(
+        self,
+        job_id: str,
+        tenant_id: str,
+        results: dict[str, Any],
+        format: str = "json",
+    ) -> dict[str, Any]:
+        """Export query results to S3.
+
+        Convenience method that handles result format conversion and export.
+
+        Args:
+            job_id: Job identifier
+            tenant_id: Tenant identifier
+            results: Query results with 'records' and optionally 'column_info'
+            format: Output format ('json', 'csv', 'parquet')
+
+        Returns:
+            Dict with 'location' (S3 URI) and 'size_bytes'
+
+        Raises:
+            ExportError: If export fails
+        """
+        records = results.get("records", [])
+        columns = [col.get("name", "") for col in results.get("column_info", [])]
+
+        # Convert records to list of dicts if needed
+        if records and isinstance(records[0], list):
+            data = [dict(zip(columns, row, strict=False)) for row in records]
+        else:
+            data = records
+
+        # Export based on format
+        if format.lower() == "parquet":
+            s3_uri = self.write_parquet_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                columns=columns,
+                data=data,
+            )
+        elif format.lower() == "csv":
+            s3_uri = self.write_csv_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                columns=columns,
+                data=data,
+            )
+        else:
+            s3_uri = self.write_json_results(
+                job_id=job_id,
+                tenant_id=tenant_id,
+                data=data,
+                metadata={"columns": columns},
+            )
+
+        # Get size info
+        obj_info = self.get_object_info(s3_uri)
+
+        return {
+            "location": s3_uri,
+            "size_bytes": obj_info.get("size_bytes", 0),
+            "format": format,
+        }
+
+    @tracer.capture_method
     def list_exports(
         self,
         tenant_id: str,

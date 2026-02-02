@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # AWS Configuration
@@ -96,6 +97,9 @@ class Settings(BaseSettings):
     )
     jwt_secret_arn: str | None = Field(
         default=None, description="Secrets Manager ARN for JWT secret"
+    )
+    jwt_secret: str | None = Field(
+        default=None, description="JWT secret (fallback when ARN not provided)"
     )
     jwt_issuer: str | None = Field(default=None, description="Expected JWT issuer")
     jwt_audience: str | None = Field(default=None, description="Expected JWT audience")

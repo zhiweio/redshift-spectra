@@ -27,7 +27,7 @@ resource "aws_lambda_layer_version" "dependencies" {
   compatible_runtimes      = [var.python_runtime]
   compatible_architectures = ["x86_64"]
   filename                 = var.layer_package_path
-  source_code_hash         = filebase64sha256(var.layer_package_path)
+  source_code_hash         = var.layer_package_path != null ? filebase64sha256(var.layer_package_path) : null
 
   lifecycle {
     create_before_destroy = true
@@ -43,14 +43,45 @@ locals {
 
   # Common environment variables for all functions
   common_environment = merge(var.environment_variables, {
+    # Application environment
+    ENVIRONMENT = var.environment
+
     # AWS Lambda Powertools configuration
     POWERTOOLS_SERVICE_NAME      = var.name_prefix
     POWERTOOLS_LOG_LEVEL         = var.log_level
     POWERTOOLS_METRICS_NAMESPACE = "${var.name_prefix}/metrics"
+    LOG_LEVEL                    = var.log_level
 
-    # Application configuration
-    LOG_LEVEL = var.log_level
+    # Redshift configuration
+    SPECTRA_REDSHIFT_CLUSTER_ID                   = var.redshift_cluster_id
+    SPECTRA_REDSHIFT_DATABASE                     = var.redshift_database
+    SPECTRA_REDSHIFT_WORKGROUP_NAME               = var.redshift_workgroup_name
+    SPECTRA_REDSHIFT_SECRET_ARN                   = var.redshift_secret_arn
+    SPECTRA_REDSHIFT_SESSION_KEEP_ALIVE_SECONDS   = tostring(var.redshift_session_keep_alive_seconds)
+    SPECTRA_REDSHIFT_SESSION_IDLE_TIMEOUT_SECONDS = tostring(var.redshift_session_idle_timeout_seconds)
+
+    # DynamoDB configuration
+    SPECTRA_DYNAMODB_TABLE_NAME          = var.dynamodb_table_name
+    SPECTRA_DYNAMODB_SESSIONS_TABLE_NAME = var.dynamodb_sessions_table_name
+    SPECTRA_DYNAMODB_BULK_TABLE_NAME     = var.dynamodb_bulk_table_name
+
+    # S3 configuration
+    SPECTRA_S3_BUCKET_NAME = var.s3_bucket_name
+    AWS_S3_USE_PATH_STYLE  = tostring(var.s3_use_path_style)
+
+    # Auth configuration
+    SPECTRA_AUTH_MODE      = var.auth_mode
+    SPECTRA_JWT_SECRET_ARN = var.jwt_secret_arn
+    SPECTRA_JWT_ISSUER     = var.jwt_issuer
+    SPECTRA_JWT_AUDIENCE   = var.jwt_audience
   })
+
+  # LocalStack-specific environment variables
+  localstack_environment = var.is_localstack ? {
+    IS_LOCALSTACK       = "true"
+    LOCALSTACK_HOSTNAME = var.localstack_hostname
+    AWS_ENDPOINT_URL    = var.aws_endpoint_url
+  } : {}
 }
 
 # =============================================================================
@@ -100,12 +131,16 @@ resource "aws_lambda_function" "authorizer" {
   layers = local.layer_arns
 
   environment {
-    variables = merge(local.common_environment, {
-      JWT_SECRET_ARN   = var.jwt_secret_arn
-      JWT_EXPIRY_HOURS = var.jwt_expiry_hours
-      JWT_ISSUER       = var.jwt_issuer
-      JWT_AUDIENCE     = var.jwt_audience
-    })
+    variables = merge(
+      local.common_environment,
+      local.localstack_environment,
+      {
+        JWT_SECRET_ARN   = var.jwt_secret_arn
+        JWT_EXPIRY_HOURS = var.jwt_expiry_hours
+        JWT_ISSUER       = var.jwt_issuer
+        JWT_AUDIENCE     = var.jwt_audience
+      }
+    )
   }
 
   vpc_config {
@@ -143,7 +178,7 @@ resource "aws_lambda_function" "api" {
   layers = local.layer_arns
 
   environment {
-    variables = local.common_environment
+    variables = merge(local.common_environment, local.localstack_environment)
   }
 
   vpc_config {
@@ -181,10 +216,14 @@ resource "aws_lambda_function" "worker" {
   layers = local.layer_arns
 
   environment {
-    variables = merge(local.common_environment, {
-      BULK_PROCESSING_ENABLED = tostring(var.enable_bulk_processing)
-      MAX_BATCH_SIZE          = tostring(var.max_batch_size)
-    })
+    variables = merge(
+      local.common_environment,
+      local.localstack_environment,
+      {
+        BULK_PROCESSING_ENABLED = tostring(var.enable_bulk_processing)
+        MAX_BATCH_SIZE          = tostring(var.max_batch_size)
+      }
+    )
   }
 
   vpc_config {

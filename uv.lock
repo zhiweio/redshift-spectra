@@ -51,6 +51,18 @@ wheels = [
 ]
 
 [[package]]
+name = "awscli-local"
+version = "0.22.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "localstack-client" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7a/71/591a30da6819c96deca2286f145d5982e73b11e7f657e8cbfc5e003ca73f/awscli_local-0.22.2.tar.gz", hash = "sha256:07c532c372753bf5f15426451dc91d6eec9de8779748049329a9a882bdac8a0b", size = 11695 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/80/6cb86812f8418b0464fc3418e78826d8fc99342848fdb82e7f576add1c1f/awscli_local-0.22.2-py3-none-any.whl", hash = "sha256:1901ebef343ba8cbde06f9f6406b5415ef53e93296718c2c31c9d49b0b09bd9d", size = 12280 },
+]
+
+[[package]]
 name = "babel"
 version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
@@ -616,6 +628,15 @@ wheels = [
 ]
 
 [[package]]
+name = "localstack-client"
+version = "2.11"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "boto3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/79/d240524248f0e675982c52586d67ea5030cf7511af9dbc8814e1d100cd15/localstack_client-2.11.tar.gz", hash = "sha256:1cbd7bf1f03b9b553ffe7ea10fe137f44e8d690a37af9c6515eba61a2379fc46", size = 11225 }
+
+[[package]]
 name = "markdown"
 version = "3.10.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1128,6 +1149,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.11.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/5a/b46fa56bf322901eee5b0454a34343cdbdae202cd421775a8ee4e42fd519/pyjwt-2.11.0.tar.gz", hash = "sha256:35f95c1f0fbe5d5ba6e43f00271c275f7a1a4db1dab27bf708073b75318ea623", size = 98019 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/01/c26ce75ba460d5cd503da9e13b21a33804d38c2165dec7b716d06b13010c/pyjwt-2.11.0-py3-none-any.whl", hash = "sha256:94a6bde30eb5c8e04fee991062b534071fd1439ef58d2adc9ccb823e7bcd0469", size = 28224 },
+]
+
+[[package]]
 name = "pymdown-extensions"
 version = "10.20.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1313,10 +1343,12 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "pyjwt" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "awscli-local" },
     { name = "boto3-stubs", extra = ["dynamodb", "redshift-data", "s3", "secretsmanager"] },
     { name = "freezegun" },
     { name = "httpx" },
@@ -1342,10 +1374,12 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=14.0.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
     { name = "pydantic-settings", specifier = ">=2.1.0" },
+    { name = "pyjwt", specifier = ">=2.8.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "awscli-local", specifier = ">=0.22.2" },
     { name = "boto3-stubs", extras = ["redshift-data", "dynamodb", "s3", "secretsmanager"], specifier = ">=1.34.0" },
     { name = "freezegun", specifier = ">=1.4.0" },
     { name = "httpx", specifier = ">=0.27.0" },

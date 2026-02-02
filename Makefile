@@ -133,83 +133,35 @@ requirements-dev.txt: pyproject.toml  ## Generate dev requirements.txt from pypr
 	@echo -e "$(GREEN)Generated requirements-dev.txt$(NC)"
 
 # =============================================================================
-# Lambda Layer (Shared Dependencies)
+# Lambda Layer (Shared Dependencies) - Uses Docker for Linux compatibility
 # =============================================================================
 
-package-layer: requirements.txt  ## Create Lambda layer with shared dependencies
-	@echo -e "$(BLUE)Creating Lambda layer with shared dependencies...$(NC)"
-	@rm -rf $(LAMBDA_DIR)/layer
-	@mkdir -p $(LAMBDA_DIR)/layer/python
-
-	# Install dependencies for Amazon Linux 2 (Lambda runtime)
-	@echo -e "$(GREEN)Installing dependencies for Lambda runtime...$(NC)"
-	pip install \
-		--platform manylinux2014_x86_64 \
-		--implementation cp \
-		--python-version 3.11 \
-		--only-binary=:all: \
-		--target $(LAMBDA_DIR)/layer/python \
-		-r requirements.txt \
-		--quiet || pip install -r requirements.txt -t $(LAMBDA_DIR)/layer/python --quiet
-
-	# Remove unnecessary files to reduce layer size
-	@echo -e "$(GREEN)Optimizing layer size...$(NC)"
-	@find $(LAMBDA_DIR)/layer -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type f -name "*.pyc" -delete 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true
-	@find $(LAMBDA_DIR)/layer -type d -name "test" -exec rm -rf {} + 2>/dev/null || true
-
-	# Create layer zip
-	cd $(LAMBDA_DIR)/layer && zip -r ../layer.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
-
-	# Show layer size
-	@echo -e "$(GREEN)Lambda layer created: $(LAMBDA_DIR)/layer.zip$(NC)"
-	@ls -lh $(LAMBDA_DIR)/layer.zip | awk '{print "Layer size: " $$5}'
+package-layer: requirements.txt  ## Create Lambda layer with shared dependencies (Docker)
+	@echo -e "$(BLUE)Creating Lambda layer using Docker...$(NC)"
+	./scripts/package_lambda.sh --layer --clean
 
 # =============================================================================
 # Lambda Function Packages (Code Only - No Dependencies)
 # =============================================================================
 
 package-lambda: package-layer  ## Package Lambda functions (code only, uses layer for deps)
-	@echo -e "$(BLUE)Packaging Lambda functions (code only)...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)
+	@echo -e "$(GREEN)Lambda packages created by package_lambda.sh$(NC)"
+	@ls -lh $(LAMBDA_DIR)/*.zip 2>/dev/null | awk '{print "  " $$9 ": " $$5}'
 
-	# Clean previous builds
-	@rm -rf $(LAMBDA_DIR)/api-handler $(LAMBDA_DIR)/worker $(LAMBDA_DIR)/authorizer
-
-	# Create API handler package (code only)
-	@echo -e "$(GREEN)Creating API handler package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/api-handler
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/api-handler/spectra
-	cd $(LAMBDA_DIR)/api-handler && zip -r ../api-handler.zip . -x "*.pyc" -x "__pycache__/*"
-
-	# Create Worker package (code only)
-	@echo -e "$(GREEN)Creating worker package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/worker
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/worker/spectra
-	cd $(LAMBDA_DIR)/worker && zip -r ../worker.zip . -x "*.pyc" -x "__pycache__/*"
-
-	# Create Authorizer package (code only)
-	@echo -e "$(GREEN)Creating authorizer package...$(NC)"
-	@mkdir -p $(LAMBDA_DIR)/authorizer
-	cp -r $(SRC_DIR) $(LAMBDA_DIR)/authorizer/spectra
-	cd $(LAMBDA_DIR)/authorizer && zip -r ../authorizer.zip . -x "*.pyc" -x "__pycache__/*"
-
-	# Show package sizes
-	@echo -e "$(GREEN)Lambda packages created in $(LAMBDA_DIR)/$(NC)"
-	@echo "Package sizes:"
-	@ls -lh $(LAMBDA_DIR)/*.zip | awk '{print "  " $$9 ": " $$5}'
-
-package-all: package-layer package-lambda  ## Create all Lambda packages (layer + functions)
+package-all: package-layer  ## Create all Lambda packages (layer + functions)
 	@echo -e "$(GREEN)All Lambda packages created!$(NC)"
 	@echo ""
 	@echo "Artifacts:"
-	@echo "  - Layer:      $(LAMBDA_DIR)/layer.zip (shared dependencies)"
-	@echo "  - API:        $(LAMBDA_DIR)/api-handler.zip (code only)"
-	@echo "  - Worker:     $(LAMBDA_DIR)/worker.zip (code only)"
-	@echo "  - Authorizer: $(LAMBDA_DIR)/authorizer.zip (code only)"
+	@ls -lh $(LAMBDA_DIR)/*.zip 2>/dev/null | awk '{print "  " $$9 ": " $$5}'
+
+# =============================================================================
+# Fat Lambda Packages for LocalStack (dependencies bundled - no layer needed)
+# Uses Docker to ensure Linux x86_64 compatibility
+# =============================================================================
+
+package-lambda-fat: requirements.txt  ## Create fat Lambda packages with bundled dependencies (for LocalStack)
+	@echo -e "$(BLUE)Creating fat Lambda packages using Docker...$(NC)"
+	./scripts/package_lambda.sh --fat --clean
 
 # Validate layer size (AWS limit: 250MB unzipped, 50MB zipped per layer)
 validate-layer:  ## Validate Lambda layer size constraints
@@ -221,15 +173,6 @@ validate-layer:  ## Validate Lambda layer size constraints
 	else \
 		echo -e "$(GREEN)Layer size OK: $$LAYER_SIZE bytes (limit: 52428800)$(NC)"; \
 	fi
-
-# Build layer using Python script (supports Docker for production)
-package-layer-docker:  ## Create Lambda layer using Docker (Amazon Linux 2 compatible)
-	@echo -e "$(BLUE)Creating Lambda layer with Docker...$(NC)"
-	uv run python scripts/build_layer.py --docker --output $(LAMBDA_DIR)/layer.zip
-
-package-layer-script: requirements.txt  ## Create Lambda layer using Python script
-	@echo -e "$(BLUE)Creating Lambda layer with script...$(NC)"
-	uv run python scripts/build_layer.py --output $(LAMBDA_DIR)/layer.zip
 
 # =============================================================================
 # Terragrunt Infrastructure

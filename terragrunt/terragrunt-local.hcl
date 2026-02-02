@@ -78,7 +78,7 @@ generate "provider" {
   if_exists = "overwrite_terragrunt"
   contents  = <<EOF
 terraform {
-  required_version = ">= 1.14.0"
+  required_version = ">= 1.11.0"
 
   required_providers {
     aws = {
@@ -142,7 +142,7 @@ inputs = {
 # -----------------------------------------------------------------------------
 # Terraform Version Constraint
 # -----------------------------------------------------------------------------
-terraform_version_constraint = ">= 14.0"
+terraform_version_constraint = ">= 1.11.0"
 
 # -----------------------------------------------------------------------------
 # Terragrunt Version Constraint
