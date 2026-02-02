@@ -6,6 +6,35 @@ This guide explains how to set up and use LocalStack for local development and t
 
 [LocalStack](https://localstack.cloud/) provides a fully functional local AWS cloud stack that allows you to develop and test cloud applications offline. This project uses Terragrunt to manage infrastructure in both LocalStack (local) and AWS (dev/prod) environments, ensuring consistency across all deployments.
 
+!!! warning "LocalStack Pro Required for Full Functionality"
+
+    **Redshift Spectra requires LocalStack Pro** for complete local development experience.
+
+    The following critical features are **only available in LocalStack Pro**:
+
+    | Feature | Community | Pro | Impact on Redshift Spectra |
+    |---------|:---------:|:---:|----------------------------|
+    | **Redshift Data API** | ❌ | ✅ | Core query execution functionality |
+    | **Lambda Layers** | ❌ | ✅ | Shared dependency management |
+    | IAM Policy Enforcement | ❌ | ✅ | Security testing |
+    | CloudWatch Metrics | ❌ | ✅ | Monitoring and alerting |
+    | Persistence | ❌ | ✅ | Data retention across restarts |
+
+    **Without LocalStack Pro**, you can still:
+
+    - Deploy and test basic infrastructure (S3, DynamoDB, IAM roles)
+    - Run unit tests with mocked AWS services
+    - Validate Terraform/Terragrunt configurations
+
+    **With LocalStack Pro**, you get:
+
+    - Full end-to-end integration testing
+    - Redshift Data API simulation for query testing
+    - Lambda Layers for optimized function deployment
+    - Complete production-like environment
+
+    Get LocalStack Pro at: [https://localstack.cloud/pricing/](https://localstack.cloud/pricing/)
+
 ## Prerequisites
 
 - **Docker**: LocalStack runs as a Docker container
@@ -292,16 +321,31 @@ terragrunt run-all apply
 
 This project uses the following AWS services emulated by LocalStack:
 
-| Service | LocalStack Support | Notes |
-|---------|-------------------|-------|
-| S3 | ✅ Full | Object storage for query results |
-| DynamoDB | ✅ Full | Job state and session management |
-| IAM | ✅ Full | Roles and policies (permissive mode) |
-| Secrets Manager | ✅ Full | JWT secrets storage |
-| Lambda | ✅ Full | Function execution (requires Docker) |
-| API Gateway | ✅ Full | REST API endpoints |
-| CloudWatch Logs | ✅ Full | Logging |
-| STS | ✅ Full | Identity |
+| Service | Community | Pro | Notes |
+|---------|:---------:|:---:|-------|
+| S3 | ✅ | ✅ | Object storage for query results |
+| DynamoDB | ✅ | ✅ | Job state and session management |
+| IAM | ✅ | ✅ | Roles and policies (permissive mode in Community) |
+| Secrets Manager | ✅ | ✅ | JWT secrets storage |
+| Lambda | ✅ | ✅ | Function execution (requires Docker) |
+| **Lambda Layers** | ❌ | ✅ | Shared dependencies - **Pro only** |
+| API Gateway | ✅ | ✅ | REST API endpoints |
+| CloudWatch Logs | ✅ | ✅ | Logging |
+| STS | ✅ | ✅ | Identity |
+| **Redshift Data API** | ❌ | ✅ | Query execution - **Pro only** |
+
+!!! tip "Running without Pro"
+
+    If you don't have LocalStack Pro, you can still develop locally by:
+
+    1. Using mocked services in unit tests (already configured)
+    2. Deploying Lambda functions as "fat" packages (dependencies bundled):
+       ```bash
+       # Build fat packages for LocalStack Community
+       make package-lambda-fat
+       ```
+       See [Fat Lambda Packages](../deployment/lambda-layer.md#fat-lambda-packages-localstack-community) for details.
+    3. Testing against a real AWS dev environment for Redshift queries
 
 ## Testing with LocalStack
 

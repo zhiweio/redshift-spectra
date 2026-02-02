@@ -43,7 +43,7 @@ flowchart LR
         SRC[src/spectra/]
     end
 
-    subgraph Build["Build"]
+    subgraph Build["Build (Docker)"]
         REQ[requirements.txt]
         LAYER[layer.zip]
         FUNCS[function.zip]
@@ -55,7 +55,7 @@ flowchart LR
     end
 
     PYPROJECT -->|"uv export"| REQ
-    REQ -->|"pip install"| LAYER
+    REQ -->|"Docker + pip"| LAYER
     SRC -->|"zip"| FUNCS
     LAYER --> L_LAYER
     FUNCS --> L_FUNC
@@ -63,45 +63,44 @@ flowchart LR
 
 ## Building the Layer
 
+The layer is built using Docker with Amazon Linux 2 to ensure Lambda runtime compatibility.
+
 ### Quick Build
 
 ```bash
-# Generate requirements and build layer
+# Generate requirements and build layer using Docker
 make package-layer
 ```
 
-### Manual Build
+### Using the Build Script
+
+```bash
+# Build layer (uses Docker by default)
+python scripts/build_layer.py --output dist/lambda/layer.zip
+
+# Skip size validation
+python scripts/build_layer.py --skip-validation
+```
+
+### Manual Docker Build
 
 ```bash
 # 1. Generate requirements.txt
 uv export --no-hashes --no-dev --no-emit-project > requirements.txt
 
-# 2. Install for Lambda runtime (Amazon Linux 2)
-pip install \
-    --platform manylinux2014_x86_64 \
-    --implementation cp \
-    --python-version 3.11 \
-    --only-binary=:all: \
-    --target dist/lambda/layer/python \
-    -r requirements.txt
+# 2. Build using Docker with Amazon Linux 2
+docker run --rm -v $(pwd):/build public.ecr.aws/lambda/python:3.11 \
+    pip install -r /build/requirements.txt -t /build/dist/lambda/layer/python --quiet
 
 # 3. Create zip
 cd dist/lambda/layer && zip -r ../layer.zip .
 ```
 
-### Docker Build (Recommended for Production)
+!!! note "Why Docker?"
 
-Build in an Amazon Linux 2 container for maximum compatibility:
-
-```bash
-make package-layer-docker
-```
-
-This uses the `scripts/build_layer.py` script with Docker:
-
-```bash
-python scripts/build_layer.py --docker --output dist/lambda/layer.zip
-```
+    Docker builds ensure 100% compatibility with the Lambda runtime environment
+    (Amazon Linux 2). Local builds may have platform-specific binary incompatibilities,
+    especially for packages like `pyarrow` that include native extensions.
 
 ## Building Function Packages
 
@@ -120,6 +119,106 @@ dist/lambda/
 ├── worker.zip         # Worker code only
 └── authorizer.zip     # Authorizer code only
 ```
+
+## Fat Lambda Packages (LocalStack Community)
+
+!!! info "For LocalStack Community Edition"
+
+    **Lambda Layers are a LocalStack Pro feature.** If you're using LocalStack Community (free version),
+    you need to use "fat" Lambda packages with all dependencies bundled inside.
+
+### What are Fat Packages?
+
+Fat packages bundle all dependencies directly into the Lambda deployment package, eliminating the need for Lambda Layers:
+
+```mermaid
+flowchart TB
+    subgraph Fat["Fat Package (~50MB each)"]
+        CODE1[Handler Code]
+        DEPS1[All Dependencies]
+    end
+
+    subgraph Layer["Layer + Slim Package"]
+        subgraph L["Layer (~50MB)"]
+            DEPS2[Shared Dependencies]
+        end
+        subgraph S["Slim Package (~KB)"]
+            CODE2[Handler Code Only]
+        end
+    end
+
+    Fat --> LS[LocalStack Community]
+    Layer --> AWS[AWS / LocalStack Pro]
+```
+
+### Building Fat Packages
+
+```bash
+# Build fat packages for LocalStack Community
+make package-lambda-fat
+
+# Or using the script directly
+./scripts/package_lambda.sh --fat --clean
+```
+
+This creates:
+
+```
+dist/lambda/
+├── api-handler-fat.zip    # API handler + all dependencies
+├── worker-fat.zip         # Worker + all dependencies
+└── authorizer-fat.zip     # Authorizer + all dependencies
+```
+
+### When to Use Each Mode
+
+| Mode | Command | Use Case | Package Size |
+|------|---------|----------|--------------|
+| **Layer + Slim** | `make package-layer` | AWS Production, LocalStack Pro | Layer: ~50MB, Functions: ~KB |
+| **Fat** | `make package-lambda-fat` | LocalStack Community (free) | Each: ~50MB |
+
+### Size Comparison
+
+| Package Type | api-handler | worker | authorizer | Total |
+|--------------|-------------|--------|------------|-------|
+| Fat (bundled) | ~50MB | ~50MB | ~50MB | ~150MB |
+| Slim (with layer) | ~10KB | ~10KB | ~10KB | ~30KB + 50MB layer |
+
+!!! warning "Fat Package Limitations"
+
+    - Larger deployment size (dependencies duplicated in each package)
+    - Slower deployments due to larger upload size
+    - Not recommended for production AWS deployments
+    - Use only for LocalStack Community local testing
+
+### Packaging Script Options
+
+The `scripts/package_lambda.sh` script supports the following options:
+
+```bash
+./scripts/package_lambda.sh [OPTIONS]
+
+Options:
+  --fat     Create fat packages with bundled dependencies (for LocalStack Community)
+  --layer   Create layer + slim packages (default, for AWS/LocalStack Pro)
+  --clean   Clean previous builds before packaging
+
+Environment Variables:
+  PYTHON_VERSION  Python version to use (default: 3.11)
+  OUTPUT_DIR      Output directory for packages (default: dist/lambda)
+```
+
+### How It Works
+
+The packaging script uses Docker to ensure Linux x86_64 compatibility:
+
+1. **Generate requirements.txt** from `pyproject.toml` using `uv export`
+2. **Start Docker container** with Python slim image (linux/amd64)
+3. **Install dependencies** into temporary directory
+4. **Optimize size** by removing `__pycache__`, `*.dist-info`, tests, etc.
+5. **Create zip packages** with proper structure
+
+For fat packages, boto3/botocore are excluded since they're already in the Lambda runtime.
 
 ## Layer Contents
 
@@ -142,13 +241,12 @@ AWS Lambda layers have a 50MB zipped / 250MB unzipped limit.
 
 ### Optimization Techniques
 
-```bash
-# Remove unnecessary files
-find dist/lambda/layer -type d -name "__pycache__" -exec rm -rf {} +
-find dist/lambda/layer -type d -name "*.dist-info" -exec rm -rf {} +
-find dist/lambda/layer -type d -name "tests" -exec rm -rf {} +
-find dist/lambda/layer -type f -name "*.pyc" -delete
-```
+The build script automatically removes unnecessary files:
+
+- `__pycache__` directories
+- `*.dist-info` and `*.egg-info` metadata
+- `tests` directories
+- Compiled Python files (`*.pyc`, `*.pyo`)
 
 ### Validate Size
 
@@ -233,6 +331,21 @@ du -sh dist/lambda/layer/python/* | sort -h
 pip install --no-deps package-name
 ```
 
+### Docker Not Available
+
+If Docker is not installed or running:
+
+```bash
+# Check Docker status
+docker info
+
+# Install Docker (macOS)
+brew install --cask docker
+
+# Start Docker Desktop
+open -a Docker
+```
+
 ## Best Practices
 
 !!! tip "Separate Code and Dependencies"
@@ -242,6 +355,11 @@ pip install --no-deps package-name
 !!! tip "Pin Dependency Versions"
 
     Use `uv.lock` to ensure reproducible builds across environments.
+
+!!! tip "Always Use Docker Builds"
+
+    Docker builds with Amazon Linux 2 ensure binary compatibility with the Lambda runtime.
+    Never use local builds for production deployments.
 
 !!! warning "Test Layer Locally"
 

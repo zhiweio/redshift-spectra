@@ -223,7 +223,7 @@ make localstack-status
 make localstack-stop
 ```
 
-See the [LocalStack documentation](docs/development/localstack.md) for more details.
+> ⚠️ **Note**: Full functionality (Redshift Data API, Lambda Layers) requires [LocalStack Pro](https://localstack.cloud/pricing/). See the [LocalStack documentation](docs/development/localstack.md) for details on Community vs Pro features.
 
 ### Running Tests
 
