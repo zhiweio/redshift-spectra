@@ -93,8 +93,8 @@ flowchart LR
 ### Prerequisites
 
 - AWS CLI configured with appropriate credentials
-- Terraform >= 1.5
-- Terragrunt >= 0.50
+- Terraform >= 1.14
+- Terragrunt >= 0.99
 - Lambda packages built (`make package-all`)
 
 ### Deploy to LocalStack (Local Development)

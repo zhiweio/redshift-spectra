@@ -12,7 +12,7 @@ Before installing Redshift Spectra, ensure you have:
 | uv | Latest | Package management |
 | Docker | Latest | LocalStack & Lambda layer building |
 | Terraform | >= 1.5 | Infrastructure as Code |
-| Terragrunt | >= 0.50 | DRY Terraform configuration |
+| Terragrunt | >= 0.99 | DRY Terraform configuration |
 | AWS CLI | 2.x | AWS credential management (for AWS deployments) |
 
 ## Installation Methods

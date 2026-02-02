@@ -9,8 +9,8 @@ This guide explains how to set up and use LocalStack for local development and t
 ## Prerequisites
 
 - **Docker**: LocalStack runs as a Docker container
-- **Terraform**: >= 1.5.0
-- **Terragrunt**: >= 0.50.0
+- **Terraform**: >= 1.14.0
+- **Terragrunt**: >= 0.99.0
 - **AWS CLI** (optional): For testing with awslocal or direct commands
 
 ## Quick Start
