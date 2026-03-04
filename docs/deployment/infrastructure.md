@@ -95,25 +95,25 @@ flowchart LR
 - AWS CLI configured with appropriate credentials
 - Terraform >= 1.11
 - Terragrunt >= 0.99
-- Lambda packages built (`make package-all`)
+- Lambda packages built (`task build:all`)
 
 ### Deploy to LocalStack (Local Development)
 
 ```bash
 # Start LocalStack and deploy all modules
-make deploy-local
+task local:deploy
 
 # Or step by step:
-make localstack-start
-make tg-init-local
-make tg-plan-local
-make tg-apply-local
+task local:start
+task local:tg-init
+task local:tg-plan
+task local:tg-apply
 
 # View dependency graph
-make tg-graph-local
+task local:tg-graph
 
 # View outputs
-make tg-output-local
+task local:tg-output
 ```
 
 See [LocalStack documentation](../development/localstack.md) for detailed local development instructions.
@@ -122,32 +122,32 @@ See [LocalStack documentation](../development/localstack.md) for detailed local 
 
 ```bash
 # Initialize all modules
-make tg-init-dev
+task infra:init-dev
 
 # Preview changes
-make tg-plan-dev
+task infra:plan-dev
 
 # Apply changes
-make tg-apply-dev
+task infra:apply-dev
 
 # View dependency graph
-make tg-graph-dev
+task infra:graph-dev
 
 # View outputs
-make tg-output-dev
+task infra:output-dev
 ```
 
 ### Deploy to Production
 
 ```bash
 # Initialize
-make tg-init-prod
+task infra:init-prod
 
 # Plan (always review production changes!)
-make tg-plan-prod
+task infra:plan-prod
 
 # Apply (requires confirmation)
-make tg-apply-prod
+task infra:apply-prod
 ```
 
 ## Module-by-Module Deployment
@@ -156,9 +156,9 @@ Deploy specific modules when needed:
 
 ```bash
 # Plan individual modules
-make tg-plan-dynamodb-dev
-make tg-plan-lambda-dev
-make tg-plan-api-gateway-dev
+task infra:plan-dynamodb-dev
+task infra:plan-lambda-dev
+task infra:plan-api-gateway-dev
 
 # Apply to specific module
 cd terragrunt/environments/dev/us-east-1/lambda
@@ -239,7 +239,7 @@ Creates REST API with:
 After deployment, retrieve important values:
 
 ```bash
-make tg-output-dev
+task infra:output-dev
 ```
 
 ```
@@ -257,21 +257,21 @@ dynamodb_table_arn = "arn:aws:dynamodb:us-east-1:123456789012:table/spectra-jobs
 
 ```bash
 # Destroy development environment
-make tg-destroy-dev
+task infra:destroy-dev
 
 # Destroy production (use with extreme caution!)
-make tg-destroy-prod
+task infra:destroy-prod
 ```
 
 ## Best Practices
 
 !!! tip "Always Plan First"
 
-    Run `make tg-plan-*` before applying changes, especially in production.
+    Run `task infra:plan ENV=dev` before applying changes, especially in production.
 
 !!! tip "Use Dependency Graph"
 
-    View module dependencies with `make tg-graph-dev` to understand deployment order.
+    View module dependencies with `task infra:graph-dev` to understand deployment order.
 
 !!! warning "State Lock"
 

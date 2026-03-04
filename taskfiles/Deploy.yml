@@ -1,0 +1,25 @@
+# =============================================================================
+# Deployment Orchestration
+# =============================================================================
+# Usage:
+#   task deploy:dev    Build, plan, and apply to dev environment
+#   task deploy:prod   Build and plan for prod (manual apply required)
+# =============================================================================
+
+version: "3"
+
+tasks:
+  dev:
+    desc: Deploy to dev environment (build + plan + apply)
+    cmds:
+      - task: build:all
+      - task: infra:plan-dev
+      - task: infra:apply-dev
+      - echo "Deployed to dev environment!"
+
+  prod:
+    desc: Prepare prod deployment (build + plan, manual apply required)
+    cmds:
+      - task: build:all
+      - task: infra:plan-prod
+      - echo "Prod deployment planned. Run 'task infra:apply-prod' to deploy."

@@ -1,0 +1,207 @@
+# =============================================================================
+# LocalStack - Local Development Environment
+# =============================================================================
+# Usage:
+#   task local:start             Start LocalStack container
+#   task local:stop              Stop LocalStack container
+#   task local:status            Check LocalStack health
+#   task local:deploy            Full deploy workflow (start + apply)
+#   task local:tg-plan           Plan Terragrunt for LocalStack
+#   task local:tg-apply          Apply Terragrunt for LocalStack
+#   task local:plan-module MODULE=dynamodb  Plan a specific module
+# =============================================================================
+
+version: "3"
+
+vars:
+  # LocalStack AWS credentials (dummy values for local use)
+  LOCAL_AWS_ENV: "AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test"
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # Container Management
+  # ---------------------------------------------------------------------------
+  start:
+    desc: Start LocalStack container and wait for readiness
+    cmds:
+      - docker compose up -d localstack
+      - |
+        echo "Waiting for LocalStack to be ready..."
+        for i in $(seq 1 30); do
+          if curl -s http://localhost:4566/_localstack/health > /dev/null 2>&1; then
+            echo "LocalStack is ready!"
+            break
+          fi
+          echo -n "."
+          sleep 2
+        done
+
+  stop:
+    desc: Stop LocalStack container
+    cmds:
+      - docker compose down
+
+  status:
+    desc: Check LocalStack health status
+    cmds:
+      - curl -s http://localhost:4566/_localstack/health | python3 -m json.tool 2>/dev/null || echo "LocalStack is not running. Start with{{":"}} task local:start"
+
+  logs:
+    desc: Show LocalStack container logs (follow mode)
+    interactive: true
+    cmds:
+      - docker compose logs -f localstack
+
+  reset:
+    desc: Reset LocalStack (destroy volumes and recreate)
+    cmds:
+      - docker compose down -v
+      - task: start
+
+  # ---------------------------------------------------------------------------
+  # Terragrunt Commands (LocalStack)
+  # ---------------------------------------------------------------------------
+  tg-init:
+    desc: Initialize Terragrunt for LocalStack
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt run --all --config {{.TG_LOCAL_CONFIG}} init
+
+  tg-plan:
+    desc: Plan Terragrunt changes for LocalStack
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt run --all --config {{.TG_LOCAL_CONFIG}} plan
+
+  tg-apply:
+    desc: Apply Terragrunt changes for LocalStack
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt run --all --config {{.TG_LOCAL_CONFIG}} --non-interactive apply
+
+  tg-destroy:
+    desc: Destroy LocalStack infrastructure
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt run --all --config {{.TG_LOCAL_CONFIG}} --non-interactive destroy
+
+  tg-output:
+    desc: Show Terragrunt outputs for LocalStack
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt run --all --config {{.TG_LOCAL_CONFIG}} output
+
+  tg-graph:
+    desc: Show dependency graph for LocalStack
+    dir: "{{.TG_LOCAL_DIR}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      TG_CONFIG: "{{.TG_LOCAL_CONFIG}}"
+    cmds:
+      - terragrunt dag graph
+
+  # ---------------------------------------------------------------------------
+  # Module-specific Commands (parameterized)
+  # ---------------------------------------------------------------------------
+  plan-module:
+    desc: "Plan a specific module for LocalStack (requires MODULE)"
+    requires:
+      vars: [MODULE]
+    dir: "{{.TG_LOCAL_DIR}}/{{.MODULE}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt plan --config {{.TG_LOCAL_CONFIG}}
+
+  apply-module:
+    desc: "Apply a specific module for LocalStack (requires MODULE)"
+    requires:
+      vars: [MODULE]
+    dir: "{{.TG_LOCAL_DIR}}/{{.MODULE}}"
+    env:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - terragrunt apply --config {{.TG_LOCAL_CONFIG}} --auto-approve
+
+  # ---------------------------------------------------------------------------
+  # Module Shortcuts
+  # ---------------------------------------------------------------------------
+  plan-dynamodb:
+    desc: Plan DynamoDB module for LocalStack
+    cmds:
+      - task: plan-module
+        vars: { MODULE: dynamodb }
+
+  apply-dynamodb:
+    desc: Apply DynamoDB module for LocalStack
+    cmds:
+      - task: apply-module
+        vars: { MODULE: dynamodb }
+
+  plan-s3:
+    desc: Plan S3 module for LocalStack
+    cmds:
+      - task: plan-module
+        vars: { MODULE: s3 }
+
+  apply-s3:
+    desc: Apply S3 module for LocalStack
+    cmds:
+      - task: apply-module
+        vars: { MODULE: s3 }
+
+  plan-iam:
+    desc: Plan IAM module for LocalStack
+    cmds:
+      - task: plan-module
+        vars: { MODULE: iam }
+
+  apply-iam:
+    desc: Apply IAM module for LocalStack
+    cmds:
+      - task: apply-module
+        vars: { MODULE: iam }
+
+  plan-secrets:
+    desc: Plan Secrets module for LocalStack
+    cmds:
+      - task: plan-module
+        vars: { MODULE: secrets }
+
+  apply-secrets:
+    desc: Apply Secrets module for LocalStack
+    cmds:
+      - task: apply-module
+        vars: { MODULE: secrets }
+
+  # ---------------------------------------------------------------------------
+  # Full Deployment Workflow
+  # ---------------------------------------------------------------------------
+  deploy:
+    desc: Deploy to LocalStack (start container + apply all modules)
+    cmds:
+      - task: start
+      - task: tg-apply
+      - |
+        echo "Deployed to LocalStack!"
+        echo ""
+        echo "LocalStack endpoint: http://localhost:4566"
+        echo "Use AWS CLI with: aws --endpoint-url=http://localhost:4566 ..."

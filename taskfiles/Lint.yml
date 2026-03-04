@@ -1,0 +1,49 @@
+# =============================================================================
+# Code Quality - Linting, Formatting & Type Checking
+# =============================================================================
+# Usage:
+#   task lint:check        Run ruff linter
+#   task lint:fix          Auto-fix lint issues
+#   task lint:format       Format code with ruff
+#   task lint:type-check   Run type checking with ty
+#   task lint:all          Run all quality checks
+# =============================================================================
+
+version: "3"
+
+tasks:
+  check:
+    desc: Run ruff linter
+    aliases: [c]
+    cmds:
+      - uv run ruff check {{.SRC_DIR}} {{.TESTS_DIR}}
+
+  fix:
+    desc: Fix linting issues automatically
+    cmds:
+      - uv run ruff check --fix {{.SRC_DIR}} {{.TESTS_DIR}}
+
+  format:
+    desc: Format code with ruff
+    aliases: [fmt]
+    cmds:
+      - uv run ruff format {{.SRC_DIR}} {{.TESTS_DIR}}
+
+  format-check:
+    desc: Check code formatting without changes
+    aliases: [fmt-check]
+    cmds:
+      - uv run ruff format --check {{.SRC_DIR}} {{.TESTS_DIR}}
+
+  type-check:
+    desc: Run type checking with ty
+    aliases: [tc]
+    cmds:
+      - uv run ty check {{.SRC_DIR}}
+
+  all:
+    desc: Run all code quality checks (lint + format-check + type-check)
+    cmds:
+      - task: check
+      - task: format-check
+      - task: type-check

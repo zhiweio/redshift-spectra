@@ -1,0 +1,66 @@
+# =============================================================================
+# Version Management
+# =============================================================================
+# Usage:
+#   task version:show         Show current version from pyproject.toml
+#   task version:bump-patch   Bump patch version (0.1.0 -> 0.1.1)
+#   task version:bump-minor   Bump minor version (0.1.1 -> 0.2.0)
+#   task version:bump-major   Bump major version (0.2.0 -> 1.0.0)
+# =============================================================================
+
+version: "3"
+
+tasks:
+  show:
+    desc: Show current version from pyproject.toml
+    cmds:
+      - grep -E '^version = ' pyproject.toml | head -1 | cut -d'"' -f2
+    silent: true
+
+  bump-patch:
+    desc: Bump patch version (e.g. 0.1.0 -> 0.1.1)
+    cmds:
+      - |
+        uv run python -c "
+        import re
+        content = open('pyproject.toml').read()
+        m = re.search(r'version = \"(\d+)\.(\d+)\.(\d+)\"', content)
+        major, minor, patch = m.groups()
+        new_version = f'{major}.{minor}.{int(patch)+1}'
+        print(f'Bumped version: {major}.{minor}.{patch} -> {new_version}')
+        open('pyproject.toml', 'w').write(
+            re.sub(r'version = \"\d+\.\d+\.\d+\"', f'version = \"{new_version}\"', content)
+        )
+        "
+
+  bump-minor:
+    desc: Bump minor version (e.g. 0.1.1 -> 0.2.0)
+    cmds:
+      - |
+        uv run python -c "
+        import re
+        content = open('pyproject.toml').read()
+        m = re.search(r'version = \"(\d+)\.(\d+)\.(\d+)\"', content)
+        major, minor, patch = m.groups()
+        new_version = f'{major}.{int(minor)+1}.0'
+        print(f'Bumped version: {major}.{minor}.{patch} -> {new_version}')
+        open('pyproject.toml', 'w').write(
+            re.sub(r'version = \"\d+\.\d+\.\d+\"', f'version = \"{new_version}\"', content)
+        )
+        "
+
+  bump-major:
+    desc: Bump major version (e.g. 0.2.0 -> 1.0.0)
+    cmds:
+      - |
+        uv run python -c "
+        import re
+        content = open('pyproject.toml').read()
+        m = re.search(r'version = \"(\d+)\.(\d+)\.(\d+)\"', content)
+        major, minor, patch = m.groups()
+        new_version = f'{int(major)+1}.0.0'
+        print(f'Bumped version: {major}.{minor}.{patch} -> {new_version}')
+        open('pyproject.toml', 'w').write(
+            re.sub(r'version = \"\d+\.\d+\.\d+\"', f'version = \"{new_version}\"', content)
+        )
+        "

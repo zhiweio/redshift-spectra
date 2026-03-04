@@ -19,13 +19,13 @@ git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
 
 # Install dependencies (including dev tools)
-make install-dev
+task setup:install-dev
 
 # Run tests to verify setup
-make test
+task test:all
 
 # Run linting
-make lint
+task lint:check
 ```
 
 ## Development Workflow
@@ -69,16 +69,16 @@ Write your code following our style guidelines (see below).
 
 ```bash
 # Format code
-make format
+task lint:format
 
 # Run linting
-make lint
+task lint:check
 
 # Run type checking
-make type-check
+task lint:type-check
 
 # Run tests
-make test
+task test:all
 ```
 
 ### 5. Commit Your Changes
@@ -116,10 +116,10 @@ We use [Ruff](https://github.com/astral-sh/ruff) for linting and formatting:
 
 ```bash
 # Format code
-make format
+task lint:format
 
 # Check style
-make lint
+task lint:check
 ```
 
 Key style points:
@@ -195,7 +195,7 @@ class TestNewFeature:
 Maintain at least 80% code coverage:
 
 ```bash
-make test-cov
+task test:cov
 ```
 
 ## Pull Request Guidelines

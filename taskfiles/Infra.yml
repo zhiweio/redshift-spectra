@@ -1,0 +1,266 @@
+# =============================================================================
+# Terraform / Terragrunt Infrastructure
+# =============================================================================
+# Usage:
+#   task infra:plan-dev              Plan dev infrastructure
+#   task infra:apply-dev             Apply dev infrastructure
+#   task infra:plan-prod             Plan prod infrastructure
+#   task infra:plan ENV=dev          Plan using ENV variable
+#   task infra:plan-module-dev MODULE=dynamodb   Plan a specific module
+#   task infra:tf-fmt                Format Terraform files
+#   task infra:iac-fmt-check         Check all IaC formatting
+# =============================================================================
+
+version: "3"
+
+tasks:
+  # ---------------------------------------------------------------------------
+  # Terraform / Terragrunt Formatting
+  # ---------------------------------------------------------------------------
+  tf-fmt:
+    desc: Format all Terraform files
+    cmds:
+      - terraform fmt -recursive terraform/
+
+  tf-fmt-check:
+    desc: Check Terraform file formatting (no changes)
+    cmds:
+      - terraform fmt -recursive -check terraform/
+
+  tg-fmt:
+    desc: Format all Terragrunt HCL files
+    dir: "{{.TG_DIR}}"
+    cmds:
+      - terragrunt hcl fmt
+
+  tg-fmt-check:
+    desc: Check Terragrunt HCL formatting (no changes)
+    dir: "{{.TG_DIR}}"
+    cmds:
+      - terragrunt hcl fmt --check
+
+  iac-fmt:
+    desc: Format all Terraform and Terragrunt files
+    cmds:
+      - task: tf-fmt
+      - task: tg-fmt
+
+  iac-fmt-check:
+    desc: Check all Terraform and Terragrunt formatting
+    cmds:
+      - task: tf-fmt-check
+      - task: tg-fmt-check
+
+  # ---------------------------------------------------------------------------
+  # Parameterized Terragrunt Commands (use ENV=dev|prod)
+  # ---------------------------------------------------------------------------
+  init:
+    desc: "Initialize Terragrunt (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt run --all init
+
+  validate:
+    desc: "Validate Terragrunt configuration (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt run --all validate
+
+  plan:
+    desc: "Plan Terragrunt changes (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt run --all plan
+
+  apply:
+    desc: "Apply Terragrunt changes (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt run --all apply
+
+  destroy:
+    desc: "Destroy infrastructure (requires ENV=dev|prod) - USE WITH CAUTION"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    prompt: "Are you sure you want to destroy {{.ENV}} infrastructure?"
+    cmds:
+      - terragrunt run --all destroy
+
+  output:
+    desc: "Show Terragrunt outputs (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt run --all output
+
+  graph:
+    desc: "Show dependency graph (requires ENV=dev|prod)"
+    requires:
+      vars: [ENV]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1"
+    cmds:
+      - terragrunt dag graph
+
+  # ---------------------------------------------------------------------------
+  # Module-specific command (use ENV + MODULE)
+  # ---------------------------------------------------------------------------
+  plan-module:
+    desc: "Plan a specific module (requires ENV and MODULE)"
+    requires:
+      vars: [ENV, MODULE]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1/{{.MODULE}}"
+    cmds:
+      - terragrunt plan
+
+  apply-module:
+    desc: "Apply a specific module (requires ENV and MODULE)"
+    requires:
+      vars: [ENV, MODULE]
+    dir: "{{.TG_DIR}}/environments/{{.ENV}}/us-east-1/{{.MODULE}}"
+    cmds:
+      - terragrunt apply
+
+  # ---------------------------------------------------------------------------
+  # Dev Environment Shortcuts
+  # ---------------------------------------------------------------------------
+  init-dev:
+    desc: Initialize Terragrunt for dev
+    cmds:
+      - task: init
+        vars: { ENV: dev }
+
+  validate-dev:
+    desc: Validate Terragrunt configuration for dev
+    cmds:
+      - task: validate
+        vars: { ENV: dev }
+
+  plan-dev:
+    desc: Plan Terragrunt changes for dev
+    cmds:
+      - task: plan
+        vars: { ENV: dev }
+
+  apply-dev:
+    desc: Apply Terragrunt changes for dev
+    cmds:
+      - task: apply
+        vars: { ENV: dev }
+
+  destroy-dev:
+    desc: Destroy dev infrastructure (use with caution!)
+    cmds:
+      - task: destroy
+        vars: { ENV: dev }
+
+  output-dev:
+    desc: Show Terragrunt outputs for dev
+    cmds:
+      - task: output
+        vars: { ENV: dev }
+
+  graph-dev:
+    desc: Show dependency graph for dev
+    cmds:
+      - task: graph
+        vars: { ENV: dev }
+
+  # ---------------------------------------------------------------------------
+  # Prod Environment Shortcuts
+  # ---------------------------------------------------------------------------
+  init-prod:
+    desc: Initialize Terragrunt for prod
+    cmds:
+      - task: init
+        vars: { ENV: prod }
+
+  validate-prod:
+    desc: Validate Terragrunt configuration for prod
+    cmds:
+      - task: validate
+        vars: { ENV: prod }
+
+  plan-prod:
+    desc: Plan Terragrunt changes for prod
+    cmds:
+      - task: plan
+        vars: { ENV: prod }
+
+  apply-prod:
+    desc: Apply Terragrunt changes for prod (requires confirmation)
+    cmds:
+      - task: apply
+        vars: { ENV: prod }
+
+  destroy-prod:
+    desc: Destroy prod infrastructure (use with extreme caution!)
+    cmds:
+      - task: destroy
+        vars: { ENV: prod }
+
+  output-prod:
+    desc: Show Terragrunt outputs for prod
+    cmds:
+      - task: output
+        vars: { ENV: prod }
+
+  graph-prod:
+    desc: Show dependency graph for prod
+    cmds:
+      - task: graph
+        vars: { ENV: prod }
+
+  # ---------------------------------------------------------------------------
+  # Dev Module Shortcuts
+  # ---------------------------------------------------------------------------
+  plan-dynamodb-dev:
+    desc: Plan DynamoDB module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: dynamodb }
+
+  plan-lambda-dev:
+    desc: Plan Lambda module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: lambda }
+
+  plan-api-gateway-dev:
+    desc: Plan API Gateway module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: api-gateway }
+
+  plan-s3-dev:
+    desc: Plan S3 module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: s3 }
+
+  plan-iam-dev:
+    desc: Plan IAM module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: iam }
+
+  plan-monitoring-dev:
+    desc: Plan Monitoring module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: monitoring }
+
+  plan-secrets-dev:
+    desc: Plan Secrets module for dev
+    cmds:
+      - task: plan-module
+        vars: { ENV: dev, MODULE: secrets }

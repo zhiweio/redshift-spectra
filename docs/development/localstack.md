@@ -47,8 +47,8 @@ This guide explains how to set up and use LocalStack for local development and t
 ### 1. Start LocalStack
 
 ```bash
-# Using Make
-make localstack-start
+# Using Task
+task local:start
 
 # Or using Docker Compose directly
 docker compose up -d localstack
@@ -61,19 +61,19 @@ docker compose up -d localstack
 
 ```bash
 # Deploy all modules to LocalStack
-make deploy-local
+task local:deploy
 
 # Or step by step
-make tg-init-local
-make tg-plan-local
-make tg-apply-local
+task local:tg-init
+task local:tg-plan
+task local:tg-apply
 ```
 
 ### 3. Verify Deployment
 
 ```bash
 # Check LocalStack status
-make localstack-status
+task local:status
 
 # List created resources
 aws --endpoint-url=http://localhost:4566 s3 ls
@@ -175,12 +175,12 @@ sequenceDiagram
 
     Note over Dev,AWS: Local Development Phase
 
-    Dev->>Docker: make localstack-start
+    Dev->>Docker: task local:start
     Docker->>LS: Start container (port 4566)
     LS-->>Docker: Ready ✓
     Docker-->>Dev: LocalStack running
 
-    Dev->>TG: make tg-apply-local
+    Dev->>TG: task local:tg-apply
     TG->>TG: Load terragrunt-local.hcl
     TG->>TF: Generate provider.tf<br/>(LocalStack endpoints)
     TF->>LS: Create resources<br/>(S3, DynamoDB, IAM...)
@@ -196,7 +196,7 @@ sequenceDiagram
 
     Note over Dev,AWS: Cloud Deployment Phase
 
-    Dev->>TG: make tg-apply-dev
+    Dev->>TG: task infra:apply-dev
     TG->>TG: Load terragrunt.hcl
     TG->>TF: Generate provider.tf<br/>(AWS endpoints)
     TF->>AWS: Create resources
@@ -210,7 +210,7 @@ sequenceDiagram
 ```mermaid
 graph LR
     subgraph Local["🏠 LocalStack Environment"]
-        L_CMD["make deploy-local"]
+        L_CMD["task local:deploy"]
         L_CONFIG["terragrunt-local.hcl"]
         L_BACKEND["Local State<br/><code>terraform.tfstate</code>"]
         L_ENDPOINT["http://localhost:4566"]
@@ -218,7 +218,7 @@ graph LR
     end
 
     subgraph Cloud["☁️ AWS Environment"]
-        C_CMD["make deploy-dev"]
+        C_CMD["task deploy:dev"]
         C_CONFIG["terragrunt.hcl"]
         C_BACKEND["S3 Remote State<br/><code>s3://...-terraform-state</code>"]
         C_ENDPOINT["AWS Regional Endpoints"]
@@ -239,44 +239,44 @@ graph LR
 
 ## Available Commands
 
-### Makefile Targets
+### Taskfile Targets
 
 | Command | Description |
 |---------|-------------|
-| `make localstack-start` | Start LocalStack container |
-| `make localstack-stop` | Stop LocalStack container |
-| `make localstack-status` | Check LocalStack health status |
-| `make localstack-logs` | Stream LocalStack container logs |
-| `make localstack-reset` | Reset LocalStack (destroy volumes and restart) |
-| `make deploy-local` | Full local deployment (start + apply) |
-| `make tg-init-local` | Initialize Terragrunt for LocalStack |
-| `make tg-plan-local` | Plan all changes for LocalStack |
-| `make tg-apply-local` | Apply all changes to LocalStack |
-| `make tg-destroy-local` | Destroy all LocalStack resources |
-| `make tg-output-local` | Show Terragrunt outputs |
-| `make tg-graph-local` | Show dependency graph for LocalStack |
+| `task local:start` | Start LocalStack container |
+| `task local:stop` | Stop LocalStack container |
+| `task local:status` | Check LocalStack health status |
+| `task local:logs` | Stream LocalStack container logs |
+| `task local:reset` | Reset LocalStack (destroy volumes and restart) |
+| `task local:deploy` | Full local deployment (start + apply) |
+| `task local:tg-init` | Initialize Terragrunt for LocalStack |
+| `task local:tg-plan` | Plan all changes for LocalStack |
+| `task local:tg-apply` | Apply all changes to LocalStack |
+| `task local:tg-destroy` | Destroy all LocalStack resources |
+| `task local:tg-output` | Show Terragrunt outputs |
+| `task local:tg-graph` | Show dependency graph for LocalStack |
 
 ### Module-Specific Commands
 
 | Command | Description |
 |---------|-------------|
-| `make tg-plan-dynamodb-local` | Plan DynamoDB changes |
-| `make tg-apply-dynamodb-local` | Apply DynamoDB changes |
-| `make tg-plan-s3-local` | Plan S3 changes |
-| `make tg-apply-s3-local` | Apply S3 changes |
-| `make tg-plan-iam-local` | Plan IAM changes |
-| `make tg-apply-iam-local` | Apply IAM changes |
+| `task local:plan-dynamodb` | Plan DynamoDB changes |
+| `task local:apply-dynamodb` | Apply DynamoDB changes |
+| `task local:plan-s3` | Plan S3 changes |
+| `task local:apply-s3` | Apply S3 changes |
+| `task local:plan-iam` | Plan IAM changes |
+| `task local:apply-iam` | Apply IAM changes |
 
 ### Formatting Commands
 
 | Command | Description |
 |---------|-------------|
-| `make tf-fmt` | Format all Terraform files |
-| `make tf-fmt-check` | Check Terraform formatting (no changes) |
-| `make tg-fmt` | Format all Terragrunt HCL files |
-| `make tg-fmt-check` | Check Terragrunt formatting (no changes) |
-| `make iac-fmt` | Format all Terraform and Terragrunt files |
-| `make iac-fmt-check` | Check all IaC formatting |
+| `task infra:tf-fmt` | Format all Terraform files |
+| `task infra:tf-fmt-check` | Check Terraform formatting (no changes) |
+| `task infra:tg-fmt` | Format all Terragrunt HCL files |
+| `task infra:tg-fmt-check` | Check Terragrunt formatting (no changes) |
+| `task infra:iac-fmt` | Format all Terraform and Terragrunt files |
+| `task infra:iac-fmt-check` | Check all IaC formatting |
 
 ## Environment Switching
 
@@ -342,7 +342,7 @@ This project uses the following AWS services emulated by LocalStack:
     2. Deploying Lambda functions as "fat" packages (dependencies bundled):
        ```bash
        # Build fat packages for LocalStack Community
-       make package-lambda-fat
+       task build:lambda-fat
        ```
        See [Fat Lambda Packages](../deployment/lambda-layer.md#fat-lambda-packages-localstack-community) for details.
     3. Testing against a real AWS dev environment for Redshift queries
@@ -387,10 +387,10 @@ print(response['TableNames'])
 
 ```bash
 # Start LocalStack first
-make localstack-start
+task local:start
 
 # Deploy infrastructure
-make deploy-local
+task local:deploy
 
 # Run integration tests against LocalStack
 LOCALSTACK_ENDPOINT=http://localhost:4566 pytest tests/integration/
@@ -458,7 +458,7 @@ LocalStack environment configuration is located at:
 By default, LocalStack data is persisted in a Docker volume (`localstack-data`). To reset:
 
 ```bash
-make localstack-reset
+task local:reset
 # or
 docker compose down -v && docker compose up -d localstack
 ```
@@ -507,7 +507,7 @@ docker exec redshift-spectra-localstack env | grep LAMBDA
 1. **Always start with local**: Develop and test locally before deploying to AWS
 2. **Use consistent configuration**: Same Terraform modules across all environments
 3. **Reset regularly**: Clear LocalStack data when switching feature branches
-4. **Test infrastructure changes locally**: Run `make tg-plan-local` before `make tg-plan-dev`
+4. **Test infrastructure changes locally**: Run `task local:tg-plan` before `task infra:plan-dev`
 5. **Use LocalStack for integration tests**: Faster and cheaper than real AWS
 
 ## Related Documentation

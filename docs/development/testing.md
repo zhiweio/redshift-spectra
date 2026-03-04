@@ -22,25 +22,25 @@ graph TB
 ### All Tests
 
 ```bash
-make test
+task test:all
 ```
 
 ### Unit Tests Only
 
 ```bash
-make test-unit
+task test:unit
 ```
 
 ### Integration Tests Only
 
 ```bash
-make test-integration
+task test:integration
 ```
 
 ### With Coverage
 
 ```bash
-make test-cov
+task test:cov
 ```
 
 ## Test Structure
@@ -339,7 +339,7 @@ jobs:
         run: uv sync
 
       - name: Run tests
-        run: make ci-test
+        run: task ci:test
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

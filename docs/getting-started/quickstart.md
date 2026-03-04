@@ -24,7 +24,7 @@ Before starting, ensure you have:
 - **AWS CLI** configured with appropriate credentials
 - **Terraform** 1.11+ and **Terragrunt** 0.99+ installed
 - **Python 3.11+** for building Lambda packages
-- **Make** for running build commands
+- **[Task](https://taskfile.dev/)** for running build commands
 
 ---
 
@@ -79,10 +79,10 @@ Build the Lambda layer and function packages:
 
 ```bash
 # Install development dependencies
-make install-dev
+task setup:install-dev
 
 # Build all Lambda packages
-make package-all
+task build:all
 ```
 
 This creates the following artifacts:
@@ -102,19 +102,19 @@ Deploy the infrastructure to your AWS account:
 
 ```bash
 # Initialize Terragrunt
-make tg-init-dev
+task infra:init-dev
 
 # Preview changes
-make tg-plan-dev
+task infra:plan-dev
 
 # Deploy infrastructure
-make tg-apply-dev
+task infra:apply-dev
 ```
 
 After deployment, retrieve your API endpoint:
 
 ```bash
-make tg-output-dev
+task infra:output-dev
 ```
 
 Example output:
@@ -377,10 +377,10 @@ To remove all deployed resources:
 
 ```bash
 # Destroy infrastructure
-make tg-destroy-dev
+task infra:destroy-dev
 
 # Clean build artifacts
-make clean
+task setup:clean
 ```
 
 !!! warning "Data Loss"
