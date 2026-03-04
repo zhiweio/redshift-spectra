@@ -1,0 +1,77 @@
+# =============================================================================
+# Build & Package
+# =============================================================================
+# Usage:
+#   task build:package           Build Python package
+#   task build:requirements      Generate requirements.txt
+#   task build:layer             Create Lambda layer (Docker)
+#   task build:lambda-fat        Create fat Lambda packages (for LocalStack)
+#   task build:all               Create all Lambda packages
+#   task build:validate-layer    Validate Lambda layer size
+# =============================================================================
+
+version: "3"
+
+tasks:
+  package:
+    desc: Build Python package
+    cmds:
+      - uv build
+
+  requirements:
+    desc: Generate requirements.txt from pyproject.toml
+    sources:
+      - "{{.ROOT_DIR}}/pyproject.toml"
+    generates:
+      - "{{.ROOT_DIR}}/requirements.txt"
+    cmds:
+      - uv export --no-hashes --no-dev --no-emit-project > requirements.txt
+
+  requirements-dev:
+    desc: Generate dev requirements.txt from pyproject.toml
+    sources:
+      - "{{.ROOT_DIR}}/pyproject.toml"
+    generates:
+      - "{{.ROOT_DIR}}/requirements-dev.txt"
+    cmds:
+      - uv export --no-hashes --no-emit-project > requirements-dev.txt
+
+  layer:
+    desc: Create Lambda layer with shared dependencies (Docker)
+    deps: [requirements]
+    cmds:
+      - ./scripts/package_lambda.sh --layer --clean
+
+  lambda:
+    desc: Package Lambda functions (code only, uses layer for deps)
+    deps: [layer]
+    cmds:
+      - ls -lh {{.LAMBDA_DIR}}/*.zip 2>/dev/null
+
+  all:
+    desc: Create all Lambda packages (layer + functions)
+    deps: [layer]
+    cmds:
+      - echo "All Lambda packages created!"
+      - ls -lh {{.LAMBDA_DIR}}/*.zip 2>/dev/null
+
+  lambda-fat:
+    desc: Create fat Lambda packages with bundled dependencies (for LocalStack)
+    deps: [requirements]
+    cmds:
+      - ./scripts/package_lambda.sh --fat --clean
+
+  validate-layer:
+    desc: Validate Lambda layer size constraints (50MB zipped limit)
+    preconditions:
+      - sh: test -f {{.LAMBDA_DIR}}/layer.zip
+        msg: "Layer zip not found. Run 'task build:layer' first."
+    cmds:
+      - |
+        LAYER_SIZE=$$(stat -f%z {{.LAMBDA_DIR}}/layer.zip 2>/dev/null || stat -c%s {{.LAMBDA_DIR}}/layer.zip)
+        if [ $$LAYER_SIZE -gt 52428800 ]; then
+          echo "ERROR: Layer exceeds 50MB limit ($$LAYER_SIZE bytes)"
+          exit 1
+        else
+          echo "Layer size OK: $$LAYER_SIZE bytes (limit: 52428800)"
+        fi

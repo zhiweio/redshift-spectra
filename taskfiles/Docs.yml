@@ -1,0 +1,21 @@
+# =============================================================================
+# Documentation
+# =============================================================================
+# Usage:
+#   task docs:build    Build documentation with MkDocs
+#   task docs:serve    Serve documentation locally at http://localhost:8000
+# =============================================================================
+
+version: "3"
+
+tasks:
+  build:
+    desc: Build documentation with MkDocs
+    cmds:
+      - uv run mkdocs build
+
+  serve:
+    desc: Serve documentation locally at http://localhost:8000
+    interactive: true
+    cmds:
+      - uv run mkdocs serve

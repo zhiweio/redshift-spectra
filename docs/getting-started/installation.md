@@ -27,16 +27,16 @@ git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
 
 # Install all dependencies (including dev tools)
-make install-dev
+task setup:install-dev
 
 # Configure environment (defaults work for LocalStack)
 cp .env.example .env
 
 # Start LocalStack and deploy infrastructure
-make deploy-local
+task local:deploy
 
 # Verify deployment
-make localstack-status
+task local:status
 ```
 
 See [LocalStack Setup](../development/localstack.md) for detailed local development instructions.
@@ -51,15 +51,15 @@ git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
 
 # Install all dependencies
-make install-dev
+task setup:install-dev
 
 # Configure for AWS
 cp .env.example .env
 # Edit .env with your AWS Redshift settings
 
 # Build and deploy
-make package-all
-make tg-apply-dev
+task build:all
+task infra:apply-dev
 ```
 
 ### Production Setup
@@ -68,10 +68,10 @@ For production deployments, install only runtime dependencies:
 
 ```bash
 # Install production dependencies only
-make install
+task setup:install
 
 # Build Lambda packages
-make package-all
+task build:all
 ```
 
 ## AWS Credentials
@@ -153,13 +153,13 @@ Run the test suite to verify everything is working:
 
 ```bash
 # Run all tests
-make test
+task test:all
 
 # Run with coverage
-make test-cov
+task test:cov
 
 # Run linting
-make lint
+task lint:check
 ```
 
 ## Next Steps

@@ -16,6 +16,27 @@ Redshift Spectra is an enterprise-grade serverless middleware that transforms yo
 
 Building a multi-tenant data platform is hard. Redshift Spectra solves the key challenges:
 
+```mermaid
+flowchart TB
+    subgraph Traditional["❌ Traditional Approach"]
+        direction TB
+        T1[Direct Database Access] --> T2[Security Risks]
+        T1 --> T3[Connection Pool Exhaustion]
+        T1 --> T4[No Tenant Isolation]
+        T1 --> T5[Compliance Violations]
+    end
+
+    subgraph Modern["✅ Redshift Spectra"]
+        direction TB
+        M1[RESTful API Layer] --> M2[Zero-Trust Security]
+        M1 --> M3[Serverless Scaling]
+        M1 --> M4[Database-Level Isolation]
+        M1 --> M5[Full Audit Trail]
+    end
+
+    Traditional -.->|"Transform"| Modern
+```
+
 | Challenge | Traditional Solution | Redshift Spectra |
 |-----------|---------------------|------------------|
 | 🔒 **Tenant Isolation** | Application-level filtering (error-prone) | Database-level RLS/RBAC enforcement |
@@ -29,42 +50,46 @@ Building a multi-tenant data platform is hard. Redshift Spectra solves the key c
 
 ```mermaid
 flowchart TB
-    subgraph Clients["Data Consumers"]
-        APP[Applications]
+    subgraph Consumers["📱 Data Consumers"]
+        APP[Internal Apps]
         BI[BI Tools]
-        PARTNER[Partners]
+        PARTNER[Partner Systems]
+        ETL[ETL Pipelines]
     end
 
-    subgraph Edge["API Layer"]
-        WAF[AWS WAF]
-        GW[API Gateway]
-        AUTH[Lambda Authorizer]
+    subgraph Spectra["🔐 Redshift Spectra"]
+        subgraph Edge["Edge Layer"]
+            APIGW[API Gateway<br/>Rate Limiting · WAF]
+        end
+
+        subgraph Auth["Authentication"]
+            AUTHZ[Authorizer<br/>JWT · API Key · IAM]
+        end
+
+        subgraph Compute["Compute Layer"]
+            QUERY[Query Handler<br/>Sync Execution]
+            BULK[Bulk Handler<br/>Async Operations]
+        end
+
+        subgraph State["State Layer"]
+            DDB[(DynamoDB<br/>Jobs · Sessions)]
+            S3[(S3<br/>Large Results)]
+        end
     end
 
-    subgraph Compute["Compute Layer"]
-        QUERY[Query Handler<br/>Synchronous]
-        BULK[Bulk Handler<br/>Asynchronous]
+    subgraph Data["🏢 Enterprise Data"]
+        RS[(Amazon Redshift<br/>RLS · RBAC)]
     end
 
-    subgraph State["State & Storage"]
-        DDB[(DynamoDB<br/>Jobs · Sessions)]
-        S3[(S3<br/>Large Results)]
-    end
-
-    subgraph Data["Data Layer"]
-        RS[(Redshift<br/>RLS · RBAC)]
-        SM[Secrets Manager]
-    end
-
-    Clients --> WAF --> GW --> AUTH
-    AUTH --> QUERY
-    AUTH --> BULK
+    Consumers --> APIGW
+    APIGW --> AUTHZ
+    AUTHZ --> QUERY
+    AUTHZ --> BULK
     QUERY --> DDB
     QUERY --> RS
     BULK --> DDB
     BULK --> S3
     BULK --> RS
-    RS --> SM
 ```
 
 ## 🚀 Quick Start
@@ -75,28 +100,16 @@ flowchart TB
 # Clone and install
 git clone https://github.com/zhiweio/redshift-spectra.git
 cd redshift-spectra
-make install-dev
+task setup:install-dev
 
 # Configure (defaults work for LocalStack)
 cp .env.example .env
 
 # Start LocalStack and deploy
-make deploy-local
+task local:deploy
 
 # Verify deployment
-make localstack-status
-```
-
-### AWS Deployment
-
-```bash
-# Configure for AWS
-cp .env.example .env
-# Edit .env with your AWS Redshift settings
-
-# Build and deploy to dev
-make package-all
-make tg-apply-dev
+task local:status
 ```
 
 ### Query API — Synchronous Execution
@@ -211,16 +224,16 @@ For local development and testing without AWS costs:
 
 ```bash
 # Start LocalStack
-make localstack-start
+task local:start
 
 # Deploy infrastructure to LocalStack
-make deploy-local
+task local:deploy
 
 # Check status
-make localstack-status
+task local:status
 
 # Clean up
-make localstack-stop
+task local:stop
 ```
 
 > ⚠️ **Note**: Full functionality (Redshift Data API, Lambda Layers) requires [LocalStack Pro](https://localstack.cloud/pricing/). See the [LocalStack documentation](docs/development/localstack.md) for details on Community vs Pro features.
@@ -229,23 +242,23 @@ make localstack-stop
 
 ```bash
 # Install dev dependencies
-make install-dev
+task setup:install-dev
 
 # Run all tests (450+ test cases)
-make test
+task test:all
 
 # Lint and format Python code
-make lint
-make format
+task lint:check
+task lint:format
 
 # Format Terraform/Terragrunt files
-make iac-fmt
+task infra:iac-fmt
 
 # Build Lambda packages
-make package-all
+task build:all
 
 # Serve documentation locally
-make docs-serve
+task docs:serve
 ```
 
 ## 📁 Project Structure

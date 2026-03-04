@@ -1,0 +1,24 @@
+# =============================================================================
+# CI/CD Pipeline Helpers
+# =============================================================================
+# Usage:
+#   task ci:test    Run CI test suite with coverage + JUnit XML
+#   task ci:lint    Run CI linting with GitHub-formatted output
+# =============================================================================
+
+version: "3"
+
+tasks:
+  test:
+    desc: Run CI test suite with coverage and JUnit XML reports
+    cmds:
+      - uv sync
+      - uv run pytest {{.TESTS_DIR}} --cov={{.SRC_DIR}} --cov-report=xml --junitxml=test-results.xml
+
+  lint:
+    desc: Run CI linting (ruff check + format check + type check)
+    cmds:
+      - uv sync
+      - uv run ruff check {{.SRC_DIR}} {{.TESTS_DIR}} --output-format=github
+      - uv run ruff format --check {{.SRC_DIR}} {{.TESTS_DIR}}
+      - uv run ty check {{.SRC_DIR}}

@@ -1,0 +1,70 @@
+# =============================================================================
+# Environment Setup & Development Utilities
+# =============================================================================
+# Usage:
+#   task setup:install       Install production dependencies
+#   task setup:dev           Install all dependencies + pre-commit hooks
+#   task setup:clean         Remove build artifacts and caches
+#   task setup:shell         Start interactive Python shell
+# =============================================================================
+
+version: "3"
+
+tasks:
+  install:
+    desc: Install production dependencies with uv
+    cmds:
+      - uv sync --no-dev
+
+  install-dev:
+    desc: Install all dependencies including dev tools
+    aliases: [dev]
+    cmds:
+      - uv sync
+      - uv run pre-commit install
+
+  upgrade:
+    desc: Upgrade all dependencies
+    cmds:
+      - uv lock --upgrade
+      - uv sync
+
+  clean:
+    desc: Clean build artifacts and caches
+    cmds:
+      - rm -rf dist/ build/ *.egg-info .pytest_cache .ty_cache .ruff_cache
+      - rm -rf .coverage htmlcov/ coverage.xml
+      - find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+      - find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    platforms: [linux, darwin]
+
+  clean-win:
+    desc: Clean build artifacts and caches (Windows)
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -Command "Remove-Item -Recurse -Force -ErrorAction SilentlyContinue dist,build,*.egg-info,.pytest_cache,.ty_cache,.ruff_cache,.coverage,htmlcov,coverage.xml"
+      - powershell -NoProfile -Command "Get-ChildItem -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue"
+      - powershell -NoProfile -Command "Get-ChildItem -Recurse -Filter *.pyc | Remove-Item -Force -ErrorAction SilentlyContinue"
+
+  shell:
+    desc: Start Python shell with project context
+    interactive: true
+    cmds:
+      - uv run python
+
+  repl:
+    desc: Start IPython REPL
+    interactive: true
+    cmds:
+      - uv run ipython
+
+  pre-commit:
+    desc: Run pre-commit hooks on all files
+    aliases: [pc]
+    cmds:
+      - uv run pre-commit run --all-files
+
+  update-hooks:
+    desc: Update pre-commit hooks
+    cmds:
+      - uv run pre-commit autoupdate

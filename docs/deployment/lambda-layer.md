@@ -69,7 +69,7 @@ The layer is built using Docker with Amazon Linux 2 to ensure Lambda runtime com
 
 ```bash
 # Generate requirements and build layer using Docker
-make package-layer
+task build:layer
 ```
 
 ### Using the Build Script
@@ -107,7 +107,7 @@ cd dist/lambda/layer && zip -r ../layer.zip .
 Function packages contain only your application code:
 
 ```bash
-make package-lambda
+task build:lambda
 ```
 
 This creates:
@@ -155,7 +155,7 @@ flowchart TB
 
 ```bash
 # Build fat packages for LocalStack Community
-make package-lambda-fat
+task build:lambda-fat
 
 # Or using the script directly
 ./scripts/package_lambda.sh --fat --clean
@@ -174,8 +174,8 @@ dist/lambda/
 
 | Mode | Command | Use Case | Package Size |
 |------|---------|----------|--------------|
-| **Layer + Slim** | `make package-layer` | AWS Production, LocalStack Pro | Layer: ~50MB, Functions: ~KB |
-| **Fat** | `make package-lambda-fat` | LocalStack Community (free) | Each: ~50MB |
+| **Layer + Slim** | `task build:layer` | AWS Production, LocalStack Pro | Layer: ~50MB, Functions: ~KB |
+| **Fat** | `task build:lambda-fat` | LocalStack Community (free) | Each: ~50MB |
 
 ### Size Comparison
 
@@ -251,7 +251,7 @@ The build script automatically removes unnecessary files:
 ### Validate Size
 
 ```bash
-make validate-layer
+task build:validate-layer
 ```
 
 Expected output:

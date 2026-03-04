@@ -1,0 +1,101 @@
+# =============================================================================
+# Redshift Spectra - Taskfile
+# =============================================================================
+# Build, test, and deployment automation using UV package manager
+#
+# Usage:
+#   task                    Show all available tasks
+#   task lint:check         Run linter
+#   task test:unit          Run unit tests
+#   task build:all          Build all Lambda packages
+#   task infra:plan-dev     Plan dev infrastructure
+#   task local:deploy       Deploy to LocalStack
+#
+# Modules:
+#   setup    - Environment setup & dev utilities
+#   lint     - Linting, formatting & type checking
+#   test     - Testing (unit, integration, coverage)
+#   build    - Build & package Lambda artifacts
+#   infra    - Terraform/Terragrunt infrastructure
+#   deploy   - Deployment orchestration
+#   docs     - Documentation build & serve
+#   local    - LocalStack local development
+#   ci       - CI/CD pipeline helpers
+#   version  - Version management
+# =============================================================================
+
+version: "3"
+
+# ---------------------------------------------------------------------------
+# Shared variables - inherited by all included taskfiles
+# ---------------------------------------------------------------------------
+vars:
+  PROJECT_NAME: redshift-spectra
+  PYTHON_VERSION: "3.11"
+  SRC_DIR: src/spectra
+  TESTS_DIR: tests
+  LAMBDA_DIR: dist/lambda
+  DOCS_DIR: docs
+  TG_DIR: "{{.ROOT_DIR}}/terragrunt"
+  TG_DEV_DIR: "{{.TG_DIR}}/environments/dev/us-east-1"
+  TG_PROD_DIR: "{{.TG_DIR}}/environments/prod/us-east-1"
+  TG_LOCAL_DIR: "{{.TG_DIR}}/environments/local/us-east-1"
+  TG_LOCAL_CONFIG: "{{.TG_DIR}}/terragrunt-local.hcl"
+
+# ---------------------------------------------------------------------------
+# Module includes - each module is a separate taskfile for maintainability
+# ---------------------------------------------------------------------------
+includes:
+  setup:
+    taskfile: ./taskfiles/Setup.yml
+    aliases: [s]
+
+  lint:
+    taskfile: ./taskfiles/Lint.yml
+    aliases: [l]
+
+  test:
+    taskfile: ./taskfiles/Test.yml
+    aliases: [t]
+
+  build:
+    taskfile: ./taskfiles/Build.yml
+    aliases: [b]
+
+  infra:
+    taskfile: ./taskfiles/Infra.yml
+    aliases: [i]
+
+  deploy:
+    taskfile: ./taskfiles/Deploy.yml
+    aliases: [d]
+
+  docs:
+    taskfile: ./taskfiles/Docs.yml
+
+  local:
+    taskfile: ./taskfiles/LocalStack.yml
+    aliases: [ls]
+
+  ci:
+    taskfile: ./taskfiles/CI.yml
+
+  version:
+    taskfile: ./taskfiles/Version.yml
+    aliases: [v, ver]
+
+# ---------------------------------------------------------------------------
+# Root tasks
+# ---------------------------------------------------------------------------
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  check-all:
+    desc: Run all quality checks (lint + format + type + tests)
+    cmds:
+      - task: lint:all
+      - task: test:all

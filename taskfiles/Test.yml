@@ -1,0 +1,42 @@
+# =============================================================================
+# Testing
+# =============================================================================
+# Usage:
+#   task test:all            Run all tests
+#   task test:unit           Run unit tests only
+#   task test:integration    Run integration tests only
+#   task test:cov            Run tests with coverage report
+#   task test:watch          Run tests in watch mode
+# =============================================================================
+
+version: "3"
+
+tasks:
+  all:
+    desc: Run all tests
+    aliases: [a]
+    cmds:
+      - uv run pytest {{.TESTS_DIR}}
+
+  unit:
+    desc: Run unit tests only
+    aliases: [u]
+    cmds:
+      - uv run pytest {{.TESTS_DIR}} -m unit
+
+  integration:
+    desc: Run integration tests only
+    aliases: [int]
+    cmds:
+      - uv run pytest {{.TESTS_DIR}} -m integration
+
+  cov:
+    desc: Run tests with coverage report
+    cmds:
+      - uv run pytest {{.TESTS_DIR}} --cov={{.SRC_DIR}} --cov-report=html --cov-report=xml
+
+  watch:
+    desc: Run tests in watch mode
+    interactive: true
+    cmds:
+      - uv run pytest-watch {{.TESTS_DIR}}
